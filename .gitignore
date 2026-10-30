@@ -1,0 +1,46 @@
+# ===== Python 通用 =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+MANIFEST
+*.egg
+.Python
+env/
+venv/
+.venv/
+.conda/
+
+# ===== 输出产物（运行时生成，不入库）=====
+output/
+
+# ===== 测试临时音频（运行时生成）=====
+tests/*.wav
+tests/test_vocal.wav
+tests/test_trim_vocal.wav
+*.wav
+*.mp3
+*.flac
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 日志 =====
+*.log
+logs/
+
+# ===== 其它 =====
+*.bak
+*.tmp
+*.cache
+.cache/
+nohup.out
