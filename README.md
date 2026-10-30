@@ -78,7 +78,7 @@
 | `search_timeout` | int | `15` | jkapi 搜索超时（秒） |
 | `request_timeout` | int | `300` | 翻唱请求超时（秒） |
 | `llm_tool_timeout` | int | `300` | LLM 工具超时（秒），应 ≥ `request_timeout` |
-| `output_dir` | string | `"output"` | 输出目录（见下方"输出目录"一节） |
+| `output_dir` | string | `"output"` | 填绝对路径则全局固定该目录；不填时：会话调用（`/cover`、LLM 翻唱）按发起会话写入 `data/workspaces/`（私信→`_FriendMessage_{QQ号}/rvc_cover`，群聊→`_GroupMessage_{群号}/rvc_cover`），非会话调用（测试/CLI）写入插件数据目录 `data/plugin_data/astrbot_plugin_rvc_cover/` |
 
 ### `uvr_choice` 接受的精确值（字符串全等匹配）
 
@@ -180,7 +180,7 @@ LLM 行为约定：
 
 ## 📂 输出目录（按会话归档）
 
-输出文件按**发起会话**归档到 AstrBot 的 `data/workspaces/` 目录：
+**会话调用**（`/cover`、`/capella`、LLM 翻唱等带 `event` 的入口）按**发起会话**归档到 AstrBot 的 `data/workspaces/` 目录：
 
 | 会话类型 | 输出路径 |
 |---|---|
@@ -190,7 +190,12 @@ LLM 行为约定：
 完整目录名由会话的 `unified_msg_origin`（格式 `平台:类型:会话ID`，如 `aiocqhttp:FriendMessage:2934160465`）
 规范化得到（非字母数字下划线点减号 → `_`），例如 `aiocqhttp:FriendMessage:2934160465` → `_FriendMessage_2934160465`。
 
-若 `output_dir` 配置了**绝对路径**（如 `D:/covers`），则忽略会话归档，所有输出固定写入该目录。
+**非会话调用**（单元测试、CLI 等拿不到 `event` 的入口）固定写入 AstrBot 插件数据目录
+`data/plugin_data/astrbot_plugin_rvc_cover/`（由 `StarTools.get_data_dir` 创建，可迁移、可审计，不污染插件安装目录）。
+
+若 `output_dir` 配置了**绝对路径**（如 `D:/covers`），则忽略上述全部规则，所有输出固定写入该目录。
+
+> 插件**不在插件安装目录内写任何文件**（音频/临时数据一律写到 AstrBot 数据目录），保证迁移与审计友好。
 
 ---
 

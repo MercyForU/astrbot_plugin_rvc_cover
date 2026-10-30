@@ -6,7 +6,6 @@ astrbot_plugin_rvc_cover - 基于 RVCSVC-API（直链模式）的 AI 翻唱插�
 
 import asyncio
 import json
-import logging
 import os
 import sys
 import time
@@ -15,13 +14,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
+from astrbot.api import logger
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 from .api import JKApiMusicAPI
-
-logger = logging.getLogger(__name__)
 
 
 @register(
@@ -70,24 +68,33 @@ class RVCSvcPluginV2(Star):
         self.search_timeout = config.get("search_timeout", 15)
 
         # 输出配置
-        # 默认输出到"当前会话工作区"：data/workspaces/{_FriendMessage_QQ号|rvc_cover} 或
-        # {_GroupMessage_群号}/rvc_cover（见 _get_session_output_dir）。
-        # 若 output_dir 配置为绝对路径，则全局固定使用该目录；
-        # 相对路径（默认 "output"）仅在非会话上下文（如单元测试/CLI）下用作回退。
+        # 会话上下文（/cover、LLM 工具等带 event 的调用）：输出到 AstrBot 会话工作区
+        #   data/workspaces/_FriendMessage_{QQ号}/rvc_cover 或
+        #   data/workspaces/_GroupMessage_{群号}/rvc_cover（见 _get_session_output_dir）
+        # 无会话上下文（单元测试/CLI）：固定输出到 AstrBot 插件数据目录
+        #   data/plugin_data/astrbot_plugin_rvc_cover/（StarTools.get_data_dir，可迁移可审计）
+        # 若 output_dir 配置为绝对路径，则全局固定使用该目录。
         _raw_output = config.get("output_dir", "output")
         if os.path.isabs(_raw_output):
             self.output_dir = Path(_raw_output)
             self._output_dir_fixed = True
         else:
-            self.output_dir = Path(__file__).resolve().parent / _raw_output
+            # 非会话上下文的固定输出目录：AstrBot 官方插件数据目录
+            # data/plugin_data/astrbot_plugin_rvc_cover/（可迁移可审计，不污染插件安装目录）
+            try:
+                from astrbot.core.star.star_tools import StarTools
+                self.output_dir = StarTools.get_data_dir("astrbot_plugin_rvc_cover")
+            except Exception:
+                # StarTools 不可用（非 AstrBot 环境，如单元测试）：回退到插件目录 output
+                self.output_dir = Path(__file__).resolve().parent / "output"
             self._output_dir_fixed = False
         try:
             self.output_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
-            # 插件安装目录可能只读（如 Program Files），回退到插件目录下的 output
+            # 插件数据目录可能只读（如 Program Files），回退到插件目录下的 output
             self.output_dir = Path(__file__).resolve().parent / "output"
             self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[RVCSVC-V2] 输出目录: {'固定 ' + str(self.output_dir) if self._output_dir_fixed else '按会话动态（data/workspaces/.../rvc_cover）'}")
+        logger.info(f"[RVC-Cover] 输出目录: {'固定 ' + str(self.output_dir) if self._output_dir_fixed else '按会话动态（data/workspaces/.../rvc_cover）'}")
 
         # 请求超时
         self.request_timeout = config.get("request_timeout", 300)
@@ -99,7 +106,7 @@ class RVCSvcPluginV2(Star):
         self._api_cache: Dict[str, JKApiMusicAPI] = {}
         self._default_api = self._create_api(self.jkapi_plat)
         logger.info(
-            f"[RVCSVC-V2] 初始化完成: base={self.base_url} "
+            f"[RVC-Cover] 初始化完成: base={self.base_url} "
             f"default_model={self.default_model or '未设置'} "
             f"plat={self.jkapi_plat} jkapi_key={'已配置' if self.jkapi_key else '未配置'}"
         )
@@ -909,7 +916,7 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                                 if now - last_heartbeat >= 15:
                                     elapsed = int(now - (deadline - self.request_timeout))
                                     logger.info(
-                                        f"[RVCSVC-V2] 翻唱进行中... 已等待 {elapsed}s / 上限 {self.request_timeout}s"
+                                        f"[RVC-Cover] 翻唱进行中... 已等待 {elapsed}s / 上限 {self.request_timeout}s"
                                         f"（后端 7860 控制台输出\"已导出\"表示完成）"
                                     )
                                     last_heartbeat = now
@@ -923,7 +930,7 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                         now = time.time()
                         if now - last_heartbeat >= 15:
                             elapsed = int(now - (deadline - self.request_timeout))
-                            logger.info(f"[RVCSVC-V2] 翻唱仍在处理中... 已等待 {elapsed}s")
+                            logger.info(f"[RVC-Cover] 翻唱仍在处理中... 已等待 {elapsed}s")
                             last_heartbeat = now
                         continue
                     if got_final:
@@ -1302,17 +1309,23 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
             ws_root = Path(get_astrbot_workspaces_path())
             safe = normalize_umo_for_workspace(umo)
         except Exception:
-            # 非 AstrBot 环境（单元测试等）：回退到固定输出目录的上一级
-            import re as _re
-            ws_root = self.output_dir.parent
-            safe = _re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip()) or "unknown"
+            # 非 AstrBot 环境（单元测试等）：回退到插件数据目录下的 workspaces 子目录
+            # （self.output_dir 此时是 data/plugin_data/astrbot_plugin_rvc_cover/）
+            safe = self._normalize_umo_fallback(umo)
+            ws_root = self.output_dir / "workspaces"
         out = ws_root / safe / "rvc_cover"
         try:
             out.mkdir(parents=True, exist_ok=True)
         except Exception:
             return self.output_dir
-        logger.info(f"[RVCSVC-V2] 会话输出目录: {out}")
+        logger.info(f"[RVC-Cover] 会话输出目录: {out}")
         return out
+
+    @staticmethod
+    def _normalize_umo_fallback(umo: str) -> str:
+        """非 AstrBot 环境下的会话目录名规范化（与官方 normalize_umo_for_workspace 一致）。"""
+        import re as _re
+        return _re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip()) or "unknown"
 
     def _sanitize_filename(self, name: str) -> str:
         """净化文件名：去掉 Windows/命令行下危险的字符（& ? = / \\ : * " < > | 空格）。

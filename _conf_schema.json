@@ -115,7 +115,7 @@
   "output_dir": {
     "description": "音频输出目录",
     "type": "string",
-    "hint": "相对路径（默认 output）= 按发起会话动态写入 AstrBot 工作区：私信→data/workspaces/_FriendMessage_{QQ号}/rvc_cover，群聊→data/workspaces/_GroupMessage_{群号}/rvc_cover。填绝对路径则全局固定使用该目录（如 D:/covers）。",
+    "hint": "填绝对路径（如 D:/covers）则所有输出固定写入该目录。不填/相对路径时：会话调用（/cover、LLM 翻唱）按发起会话自动写入 AstrBot 会话工作区（私信→data/workspaces/_FriendMessage_{QQ号}/rvc_cover，群聊→data/workspaces/_GroupMessage_{群号}/rvc_cover）；非会话调用（测试/CLI）固定写入 AstrBot 插件数据目录 data/plugin_data/astrbot_plugin_rvc_cover/。",
     "default": "output"
   },
   "request_timeout": {

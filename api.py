@@ -8,13 +8,11 @@
 """
 
 import json
-import logging
 import re
 from typing import Any, Dict, List, Optional
 
 import httpx
-
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 
 class JKApiMusicAPI:
