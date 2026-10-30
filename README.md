@@ -1,4 +1,4 @@
-# astrbot_plugin_rvc_svc_v2 🎤
+# astrbot_plugin_rvc_cover 🎤
 
 基于 **RVCSVC-API**（直链模式）的 AstrBot AI 翻唱插件。
 
@@ -9,10 +9,11 @@
   → LLM 调用 search_music（jkapi.com 搜出音频直链 music_url）
   → LLM 调用 rvc_cover / a_capella_cover（带直链走后端 /convert）
   → RVCSVC-API 下载 → UVR5/MSST 分离 → RVC/SVC 变声 → 音效后处理 → 混音/清唱导出
-  → 插件下载 MP3 → 按句子切分（QQ 语音 1 分钟上限）→ 逐段发送
+  → 插件下载 MP3 → 按句子切分（规避语音 1 分钟上限）→ 逐段发送
 ```
 
-> 音源**唯一入口**是 [jkapi.com](https://jkapi.com)（第三方音乐搜索 API），搜出的 `music_url` 直链喂给后端下载。
+> 音源**入口**是 [jkapi.com](https://jkapi.com)
+🙏🏻**特别感谢**✨jkapi✨在这里先给这样的公益大佬磕一个**orz**
 
 ---
 
@@ -32,10 +33,10 @@
 
 ## 🔗 前置依赖
 
-1. **RVCSVC-API**（直链版）已启动并加载模型
+1. **RVCSVC-API-Pro**（RVCSVC-API魔改版）已启动并加载模型[RVCSVC-API-Pro获取](https://github.com/MercyForU/RVCSVC-API-Pro)
    - 默认 `http://127.0.0.1:7860`
    - 后端只接受音频下载直链（mp3/wav/flac/m4a 等）
-   - 详见 `RVCSVC-API/README.md`
+   - 详见 `RVCSVC-API-Pro/README.md`
 2. **jkapi.com 密钥**（注册 https://jkapi.com 获取，填到 `jkapi_api_key`）
 3. **AstrBot** v4.16+
 4. **ffmpeg** 在 PATH 中（pydub 切分用；Windows 可 `winget install Gyan.FFmpeg`）
@@ -44,27 +45,18 @@
 
 ## 📦 安装
 
-1. 把插件目录放入 AstrBot 插件目录：
+把插件目录放入 AstrBot 插件目录：
 
    ```
-   data/plugins/astrbot_plugin_rvc_svc_v2/
+   data/plugins/astrbot_plugin_rvc_cover/
    ```
 
-2. 安装依赖（仅 httpx / pydub 为必需，jkapi 搜索走 AstrBot 自带的 httpx）：
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. 重启 AstrBot 加载插件。
-
-> ⚠️ 改过 `_conf_schema.json` 或 `main.py` 后必须**重启 AstrBot** 才生效；改过后端 `app_rvc.py` 后必须**重启 RVCSVC-API**。
 
 ---
 
 ## ⚙️ 配置
 
-在 `data/plugins_config/astrbot_plugin_rvc_svc_v2.json` 配置（也可在 dashboard 插件配置页编辑）：
+在 `data/plugins_config/astrbot_plugin_rvc_cover/.json` 配置（也可在 dashboard 插件配置页编辑）：
 
 | 配置键 | 类型 | 默认 | 说明 |
 |---|---|---|---|
