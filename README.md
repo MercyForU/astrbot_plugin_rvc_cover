@@ -31,7 +31,7 @@
 
 本插件音源**入口** [jkapi](https://jkapi.com)
 
-# 🙏🏻**特别感谢**✨**jkapi**✨在这里先给这样的公益大佬磕一个**orz**
+# 🙏🏻**特别感谢**✨**jkapi**✨先给这样的公益大佬磕一个**orz**
 # 🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨**orz**
 
 ---
