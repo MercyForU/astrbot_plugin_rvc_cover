@@ -25,7 +25,7 @@ from .api import JKApiMusicAPI
 @register(
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
-    "基于 RVCSVC-API 的 AI 翻唱插件（直链模式）：jkapi 搜索直链 + UVR5 分离 + 变声一体化",
+    "🎤 基于 RVCSVC-API 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(必须下载本插件专属的RVCSVC-API作为后端中间层，详见插件文档)",
     "1.1.0",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
