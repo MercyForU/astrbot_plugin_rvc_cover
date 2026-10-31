@@ -1,6 +1,6 @@
 # astrbot_plugin_rvc_cover 🎤
 
-基于 ✨[RVCSVC-API-Pro]✨(https://github.com/MercyForU/RVCSVC-API-Pro)的 AstrBot AI 翻唱插件。
+基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨的 AstrBot AI 翻唱插件。
 
 工作流程：
 
