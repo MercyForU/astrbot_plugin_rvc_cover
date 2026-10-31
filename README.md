@@ -2,19 +2,35 @@
 
 基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨的 AstrBot AI 翻唱插件。
 
-工作流程：
+**前置依赖**：
 
+**手动**部署：
+
+  获取[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro) 并且部署适合自己显卡型号的[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) 附上 [国内获取RVC-Project](https://www.yuque.com/flowercry/hxf0ds)
+  **注意**：需要运行**RVC模型**中`go-webui.bat`再启动**RVCSVC-API-Pro**中`启动 rvcapi.bat`本插件方可正常使用。
+
+或者**许愿式**部署：
+
+  将下面这段提示词发送给任意可调用工具的agent：
+  
 ```
+请根据https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI帮我部署适合我显卡的RVC模型。
+再在https://github.com/MercyForU/RVCSVC-API-Pro项目的README中选择合适的链接获取RVCSVC-API-Pro整合包并解压
+部署完成后我需要运行RVC模型中的go-webui.bat等待go-webui.bat启动完成后，再启动RVCSVC-API-Pro中的启动 rvcapi.bat。
+请帮我写成一键启动脚本放在桌面上命名为：启动AI翻唱助手后端.bat
+```
+
+**工作流程**：
+
 用户说"翻唱/清唱 某首歌"
   → LLM 调用 search_music（jkapi.com 搜出音频直链 music_url）
   → LLM 调用 rvc_cover / a_capella_cover（带直链走后端 /convert）
   → RVCSVC-API 下载 → UVR5/MSST 分离 → RVC/SVC 变声 → 音效后处理 → 混音/清唱导出
   → 插件下载 MP3 → 按句子切分（规避语音 1 分钟上限）→ 逐段发送
-```
 
-> 音源**入口**是 [jkapi](https://jkapi.com)
+音源**入口**是 [jkapi](https://jkapi.com)
 🙏🏻**特别感谢**✨**jkapi**✨在这里先给这样的公益大佬磕一个**orz**
-
+🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨**orz**
 ---
 
 ## 目录
