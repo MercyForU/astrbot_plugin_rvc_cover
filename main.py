@@ -1398,7 +1398,8 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
             if m:
                 host = m.group(1)
             rvc_url = f"http://{host}:7897"
-            resp = httpx.post(f"{rvc_url}/run/infer_refresh", json={"data": []}, timeout=10)
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(f"{rvc_url}/run/infer_refresh", json={"data": []})
             if resp.status_code == 200:
                 d = resp.json()
                 data = d.get("data", [])
