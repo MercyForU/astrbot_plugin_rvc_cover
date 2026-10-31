@@ -25,17 +25,14 @@
 用户说"翻唱/清唱 某首歌"
 
   → LLM 调用 search_music（jkapi.com 搜出音频直链 music_url）
-
   → LLM 调用 rvc_cover / a_capella_cover（带直链走后端 /convert）
-
   → RVCSVC-API 下载 → UVR5/MSST 分离 → RVC/SVC 变声 → 音效后处理 → 混音/清唱导出
-
   → 插件下载 MP3 → 按句子切分（规避语音 1 分钟上限）→ 逐段发送
 
 本插件音源**入口** [jkapi](https://jkapi.com)
 
-#🙏🏻**特别感谢**✨**jkapi**✨在这里先给这样的公益大佬磕一个**orz**
-#🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨**orz**
+# 🙏🏻**特别感谢**✨**jkapi**✨在这里先给这样的公益大佬磕一个**orz**
+# 🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨**orz**
 
 ---
 
