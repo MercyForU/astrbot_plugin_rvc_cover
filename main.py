@@ -1,7 +1,7 @@
 """
-astrbot_plugin_rvc_cover - 基于 RVCSVC-API（直链模式）的 AI 翻唱插件
+astrbot_plugin_rvc_cover - 基于 RVCSVC-API-Pro 的 AI 翻唱插件
 
-流程：jkapi.com 按歌名搜出音频直链 → RVCSVC-API 直链下载 → UVR5 人声分离 + RVC/SVC 变声 → 混音导出
+流程：调用外部网站接口按歌名搜出音频直链 → RVCSVC-API-Pro 直链下载 → UVR5 人声分离 + RVC/SVC 变声 → 混音导出
 """
 
 import asyncio
@@ -25,7 +25,7 @@ from .api import JKApiMusicAPI
 @register(
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
-    "� 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的**音域**，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
+    "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的**音域**，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
     "1.1.0",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
