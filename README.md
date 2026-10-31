@@ -17,7 +17,7 @@
 请根据https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI帮我部署适合我显卡的RVC模型；
 再在https://github.com/MercyForU/RVCSVC-API-Pro项目的README中选择合适的链接获取RVCSVC-API-Pro整合包并解压；
 全部部署完成后我先需要运行RVC模型中的：go-webui.bat等待go-webui.bat完全启动后（端口7897被监听），再启动RVCSVC-API-Pro中的：启动 rvcapi.bat；
-请帮我写成一键启动脚本放在桌面上命名为：启动AI翻唱助手后端.bat。
+请帮我写成一键启动脚本放在桌面上命名为：启动AI翻唱助手后端.bat
 ```
 
 **工作流程**：
@@ -32,7 +32,7 @@
 本插件音源**入口** [jkapi](https://jkapi.com)
 
 # 🙏🏻**特别感谢**✨[jkapi](https://jkapi.com)✨先给这样的公益大佬磕一个 **orz**
-# 🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨让小鱼开口唱歌成为可能 **orz**
+# 🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨让小鱼开口**唱歌**成为可能
 
 ---
 
