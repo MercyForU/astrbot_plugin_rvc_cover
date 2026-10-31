@@ -1,6 +1,6 @@
 # astrbot_plugin_rvc_cover 🎤
 
-基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)的 AstrBot AI 翻唱插件。
+基于 ✨[RVCSVC-API-Pro]✨(https://github.com/MercyForU/RVCSVC-API-Pro)的 AstrBot AI 翻唱插件。
 
 工作流程：
 
@@ -12,8 +12,8 @@
   → 插件下载 MP3 → 按句子切分（规避语音 1 分钟上限）→ 逐段发送
 ```
 
-> 音源**入口**是 [jkapi.com](https://jkapi.com)
-🙏🏻**特别感谢**✨jkapi✨在这里先给这样的公益大佬磕一个**orz**
+> 音源**入口**是 [jkapi](https://jkapi.com)
+🙏🏻**特别感谢**✨**jkapi**✨在这里先给这样的公益大佬磕一个**orz**
 
 ---
 
@@ -250,23 +250,6 @@ LLM 工具返回结果会列出所有分段路径，模型据此按顺序发语�
 - 清唱需第 13 位参数 `a_capella=True`
 - 自适应需 `adaptive_shift=True` 且 `key_shift==0`，且后端 `RVCSVC-API/` 根目录有 `adaptive_pitch.py`
   （要 GPU 加速还需 `rmvpe.pt` + `infer/rmvpe.py`，缺任一会回退 CPU 的 pyin，不影响出结果）
-
----
-
-## 📝 测试脚本
-
-`tests/` 下提供以下脚本（用 `RVCSVC-API\runtime\python.exe` 运行）：
-
-| 脚本 | 用途 |
-|---|---|
-| `probe_jkapi.py` | 验证 jkapi 搜索（空格 vs 下划线） |
-| `test_api_class.py` | 测 `JKApiMusicAPI` 类（无 aiohttp 时用 requests 模拟） |
-| `test_adaptive.py` | 合成音测自适应变调脚本 |
-| `verify_schema_vs_backend.py` | 比对 schema `enum` 与后端 `choices` 是否逐字符一致 |
-| `verify_keys.py` | 核对 main.py 读的配置键与 schema 是否一致 |
-| `verify_acappella_wiring.py` / `verify_acappella_final.py` | 核对清唱通道 13 参数全链路对齐 |
-| `test_trim_silence.py` | 合成音测清唱大段间奏静音修剪（长静默被剪、短停顿保留） |
-| `test_rmvpe_load.py` | 测 RMVPE GPU 加载 + 合成信号推理 + 回退 pyin 全链路 |
 
 ---
 

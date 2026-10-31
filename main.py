@@ -26,7 +26,7 @@ from .api import JKApiMusicAPI
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
     "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "1.1.1",
+    "1.1.2",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
@@ -86,12 +86,14 @@ class RVCSvcPluginV2(Star):
                 self.output_dir = StarTools.get_data_dir("astrbot_plugin_rvc_cover")
             except Exception:
                 # StarTools 不可用（非 AstrBot 环境，如单元测试）：回退到插件目录 output
+                logger.warning("[RVC-Cover] StarTools 不可用，输出目录回退到插件安装目录（仅限测试/非 AstrBot 环境）")
                 self.output_dir = Path(__file__).resolve().parent / "output"
             self._output_dir_fixed = False
         try:
             self.output_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             # 插件数据目录可能只读（如 Program Files），回退到插件目录下的 output
+            logger.warning("[RVC-Cover] 插件数据目录不可写，输出目录回退到插件安装目录（仅限数据目录只读的环境）")
             self.output_dir = Path(__file__).resolve().parent / "output"
             self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"[RVC-Cover] 输出目录: {'固定 ' + str(self.output_dir) if self._output_dir_fixed else '按会话动态（data/workspaces/.../rvc_cover）'}")
@@ -1311,6 +1313,7 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
         except Exception:
             # 非 AstrBot 环境（单元测试等）：回退到插件数据目录下的 workspaces 子目录
             # （self.output_dir 此时是 data/plugin_data/astrbot_plugin_rvc_cover/）
+            logger.warning("[RVC-Cover] 无法解析会话工作区，回退到插件数据目录")
             safe = self._normalize_umo_fallback(umo)
             ws_root = self.output_dir / "workspaces"
         out = ws_root / safe / "rvc_cover"
