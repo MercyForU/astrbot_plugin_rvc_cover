@@ -71,6 +71,9 @@ class RVCSvcPluginV2(Star):
         # false=不切分，整段直发（>60s 会被 QQ 拒收/截断，由用户自担）
         self.auto_split = bool(config.get("auto_split", True))
 
+        # 分声部变调（男女合唱）：开启后后端自动检测双声部，每段用各自最优升降调推理
+        self.split_duet = bool(config.get("split_duet", False))
+
         # jkapi.com 搜索配置（唯一音源，搜出音频直链喂给后端）
         self.jkapi_key = config.get("jkapi_api_key", "")
         # 平台：qq=QQ音乐（默认），wy=网易云音乐
@@ -717,6 +720,7 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
 - 自适应变调: {adaptive_status}（舒适区 {comfort}）
 - 清唱静音间隙: {gap_ms} ms
 - 自动切分 (auto_split): {"开启（长音频按句子切 50-59s 段发送）" if self.auto_split else "关闭（整段直发，>60s 可能被 QQ 拒收）"}
+- 分声部变调 (合唱): {"开启（男女合唱自动检测双声部，各自变调后拼回）" if self.split_duet else "关闭（整轨同一升降调）"}
 - 混响强度: {reverb} / 回声: {delay}
 - 默认升降调: {kshift} / 人声音量: {vvol} dB / 伴奏音量: {ivol} dB
 - jkapi 密钥: {key_status}
@@ -874,10 +878,11 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
         - 返回音频文件路径（后端本地路径，需通过 /gradio_api/file= 下载）
         - a_capella=True 时后端跳过伴奏合成，直接输出纯人声（{歌名}-清唱.mp3）
 
-        参数顺序（13 个，与后端 btn.click 注册一致）：
+        参数顺序（15 个，与后端 btn.click 注册一致）：
         [direct_link, key_shift, vocal_vol, inst_vol, model_dropdown,
          reverb_intensity, delay_intensity, uvr_choice, f0_method,
-         adaptive_shift, comfort_low, comfort_high, a_capella]
+         adaptive_shift, comfort_low, comfort_high, a_capella,
+         split_duet, manual_part_splits]
 
         event：传入当前消息事件时，输出文件写入该会话的 workspaces 目录
         （data/workspaces/_FriendMessage_{QQ号}/rvc_cover 或
@@ -900,6 +905,8 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                     self.comfort_low,                 # 舒适区低音（音名，如 A3）
                     self.comfort_high,                # 舒适区高音（音名，如 A5）
                     bool(a_capella),                  # 清唱模式（True=不合成伴奏，只出纯人声）
+                    self.split_duet,                   # 分声部变调（男女合唱，自动检测双声部）
+                    None,                              # manual_part_splits（手动切分点，插件端暂不暴露）
                 ]
             }
 
