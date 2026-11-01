@@ -26,7 +26,7 @@ from .api import JKApiMusicAPI
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
     "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "1.1.4",
+    "1.1.5",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
