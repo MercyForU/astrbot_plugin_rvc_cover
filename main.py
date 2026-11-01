@@ -26,7 +26,7 @@ from .api import JKApiMusicAPI
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
     "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "1.1.3",
+    "1.1.4",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
@@ -60,6 +60,16 @@ class RVCSvcPluginV2(Star):
         self.comfort_high = config.get("comfort_high", "A5") or "A5"
         # 清唱静音修剪：保留的自然间隙（ms）——剪掉大段间奏后句间保留的停顿
         self.trim_keep_gap_ms = int(config.get("trim_keep_gap_ms", 1000))
+        # 清唱静音修剪：静音判定阈值（dBFS）。RVC 清唱里"间奏"常带底噪/混响尾巴，
+        # RMS 不会真正到 -42 之下。默认 -36（更激进，把"几乎没声音"的段也算静音）；
+        # 若还剪不动可继续调低到 -48/-54（越负越容易判成静音，越容易误剪）。
+        self.trim_silence_dbfs = float(config.get("trim_silence_dbfs", -36.0))
+        # 清唱静音修剪：最短静默段长度（ms）。只有连续静默 ≥ 此值才剪。
+        # 默认 1500ms（保守，保护换气/节奏停顿）；想更激进可调到 800。
+        self.trim_min_silence_ms = int(config.get("trim_min_silence_ms", 1500))
+        # 语音切分开关：true=长音频自动按句子边界切 50-59s 段发送（QQ 语音 1 分钟上限）
+        # false=不切分，整段直发（>60s 会被 QQ 拒收/截断，由用户自担）
+        self.auto_split = bool(config.get("auto_split", True))
 
         # jkapi.com 搜索配置（唯一音源，搜出音频直链喂给后端）
         self.jkapi_key = config.get("jkapi_api_key", "")
@@ -317,9 +327,13 @@ class RVCSvcPluginV2(Star):
                         f"等待期间不要发其它消息。\n"
                         f"{part_list}"
                     )
+                trimmed_note = ""
+                if len(parts) == 1 and result.get("output_path") and parts[0] != result.get("output_path"):
+                    trimmed_note = "（已剪间奏）"
                 return (
                     f"✅ {prefix}完成: 《{display_name}》{suffix_note}\n"
-                    f"输出文件: {result.get('output_path', '')}（时长未超 1 分钟，直接发送即可）"
+                    f"输出文件: {parts[0]}{trimmed_note}（直接发送即可"
+                    f"{'；auto_split 已关闭，长音频可能被 QQ 语音拒收/截断' if not self.auto_split else '，时长未超 1 分钟'}）"
                 )
             return f"❌ {prefix}失败: {result.get('error', '未知错误')}"
         except Exception as e:
@@ -417,12 +431,17 @@ class RVCSvcPluginV2(Star):
                         await asyncio.sleep(2)
                 yield event.plain_result(f"✅ 全部 {total} 段已发送完成")
             else:
-                # 单段（<=60s）或回退：整文件
-                output_path = result.get("output_path")
-                if output_path and os.path.exists(output_path):
-                    yield event.image(
-                        output_path, text=f"🎵 {prefix}完成: 《{display_name}》"
-                    )
+                # 单段：优先发 parts[0]（清唱剪过间奏的 _trimmed 文件），output_path 兜底
+                send_path = None
+                if parts:
+                    send_path = parts[0]
+                if not (send_path and os.path.exists(send_path)):
+                    send_path = result.get("output_path")
+                if send_path and os.path.exists(send_path):
+                    label = "🎵 " + prefix + "完成: 《" + display_name + "》"
+                    if parts and result.get("output_path") and parts[0] != result.get("output_path"):
+                        label += "（已剪间奏）"
+                    yield event.image(send_path, text=label)
                 else:
                     yield event.plain_result(f"✅ {prefix}完成: {result.get('message', '')}")
         else:
@@ -678,9 +697,10 @@ class RVCSvcPluginV2(Star):
 - `/linkcover https://cdn.xxx.com/song.mp3 -m wuxiV1.pth` - 用直链翻唱
 
 **语音发送说明：**
-QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切成
+QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频会自动按**句子停顿处**切成
 50-59 秒的小段（`{output_dir}/{歌名}_parts/partN.mp3`），并**按顺序**逐段发送，
-不会切进完整的一句。LLM 工具返回结果也会列出所有分段路径，供模型按顺序发语音。
+不会切进完整的一句；末尾短尾巴（<8s）也会照常发送。LLM 工具返回结果也会列出所有分段路径，供模型按顺序发语音。
+`auto_split` 关闭时不切分、整段直发（>60s 可能被 QQ 拒收/截断，由用户自担）。
 
 **输出目录：**
 输出文件按**发起会话**归档到 AstrBot 的工作区目录：
@@ -696,6 +716,7 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
 - F0 音高提取: {f0}
 - 自适应变调: {adaptive_status}（舒适区 {comfort}）
 - 清唱静音间隙: {gap_ms} ms
+- 自动切分 (auto_split): {"开启（长音频按句子切 50-59s 段发送）" if self.auto_split else "关闭（整段直发，>60s 可能被 QQ 拒收）"}
 - 混响强度: {reverb} / 回声: {delay}
 - 默认升降调: {kshift} / 人声音量: {vvol} dB / 伴奏音量: {ivol} dB
 - jkapi 密钥: {key_status}
@@ -979,13 +1000,15 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                         local_path.write_bytes(fresp.content)
                         logger.info(f"翻唱结果已下载: {local_path} ({len(fresp.content)} bytes)")
 
-                        # QQ 语音 1 分钟上限 —— 把长音频按"句子边界"切成 50-59s 的小段
-                        # 清唱模式先剪掉段内大段间奏静音（保留换气/小停顿），再切段
+                        # QQ 语音 1 分钟上限 —— auto_split=true 时按"句子边界"把长音频
+                        # 切成 50-59s 的小段；auto_split=false 时不切分、整段直发
+                        # （清唱模式仍先剪掉段内大段间奏静音，保留换气/小停顿）
                         parts = self._split_for_qq_voice(
                             local_path, song_name,
                             trim_silence=bool(a_capella), out_dir=out_dir,
+                            split=self.auto_split,
                         )
-                        if parts:
+                        if parts and len(parts) > 1:
                             part_list = "\n".join(
                                 [f"  第{i+1}段: {p}" for i, p in enumerate(parts)]
                             )
@@ -998,6 +1021,20 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                                     f"完整文件: {local_path}\n"
                                     f"已按 {len(parts)} 段切分（QQ语音 1 分钟上限），请**按顺序**发送：\n"
                                     f"{part_list}"
+                                ),
+                            }
+                        if parts:
+                            # parts[0] 即实际要发的文件（清唱+auto_split 关闭时为剪过间奏的 _trimmed.mp3）
+                            note = ""
+                            if len(parts) == 1 and parts[0] != str(local_path):
+                                note = "（已剪间奏）"
+                            return {
+                                "success": True,
+                                "output_path": str(local_path),
+                                "parts": parts,
+                                "message": (
+                                    f"翻唱完成: 《{song_name}》\n"
+                                    f"输出文件: {parts[0]}{note}"
                                 ),
                             }
                         return {
@@ -1086,15 +1123,29 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
     # ==================== QQ 语音切分（句子边界感知） ====================
 
     def _trim_long_silence(self, audio: "AudioSegment",
-                            silence_dbfs: float = -42.0,
+                            silence_dbfs: float = -36.0,
                             min_silence_ms: int = 1500,
                             keep_gap_ms: int = 1000,
-                            min_voice_ms: int = 1200) -> "AudioSegment":
+                            min_voice_ms: int = 400) -> "AudioSegment":
         """剪掉长段静默（间奏），保留短停顿（换气/小节奏停顿）。
 
         判定：连续 RMS < silence_dbfs 的区间，若长度 ≥ min_silence_ms 视为"大段间奏"，
         剪掉但保留 keep_gap_ms（默认 1000ms）的自然间隙，让句间停顿舒缓不急促。
-        若剪后某句语音 < min_voice_ms（太短的碎片），与前后句合并，不单独丢弃。
+
+        参数说明（两个独立旋钮，可按需调整）：
+        - min_silence_ms（默认 1500ms）：只剪 ≥1.5s 的连续静默。
+          自然换气（100~400ms）和节奏停顿（<1.5s）不会被剪。
+          想更激进（剪掉 0.8s 的停顿）→ 调低到 800；
+          想更保守（只剪 ≥2s 的间奏）→ 调高到 2000。
+        - silence_dbfs（默认 -36.0）：RMS 低于此值判为静音。
+          RVC 清唱里的间奏常带底噪/混响尾巴，-42 往往不够敏感，
+          -36 更激进。若还剪不动可调低到 -48/-54（越负越容易判成静音，
+          也越容易误剪真句）。
+
+        v2 修复说明：
+        - 合并片段时**不丢时间戳**：短片段（< min_voice_ms）用前段结尾作桥合并，
+          不再像 v1 那样直接 `continue` 丢掉 1s 真句（v1 等于误删真实内容）。
+        - 增加诊断日志：打出来剪掉的总时长、保留段数，便于排查"没剪动"。
         """
         from pydub import AudioSegment
 
@@ -1133,12 +1184,24 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
         if cursor < total_ms:
             keep.append([cursor, total_ms])
 
-        # 合并相邻的语音片段，丢弃 < min_voice_ms 的碎片
+        # 合并相邻的语音片段。
+        # v2 修复：短片段（< min_voice_ms）不再直接丢弃（v1 的 `continue` 会把
+        # 1s 的真句整段跳过，误删真实内容）。改为并入相邻段：
+        # - 若与前段间距 ≤ 桥接距离 → 延伸前段
+        # - 否则作为独立段保留（哪怕很短，也不丢时间戳）
+        bridge_ms = min_silence_ms * 2  # 桥接距离
         merged: List[List[int]] = []
         for (a0, a1) in keep:
-            if a1 - a0 < min_voice_ms:
+            seg_len = a1 - a0
+            if seg_len < min_voice_ms:
+                # 短片段：尝试并入前段（若间距允许）
+                if merged and a0 - merged[-1][1] <= bridge_ms:
+                    merged[-1][1] = a1
+                    continue
+                # 否则作为独立段保留（不丢时间戳）
+                merged.append([a0, a1])
                 continue
-            if merged and a0 - merged[-1][1] <= step_ms * 2:
+            if merged and a0 - merged[-1][1] <= bridge_ms:
                 merged[-1][1] = a1
             else:
                 merged.append([a0, a1])
@@ -1147,17 +1210,20 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
         out = AudioSegment.silent(duration=0)
         for (a0, a1) in merged:
             out += audio[a0:a1]
-
+        # 诊断日志：剪掉的总时长、保留段数、剪后时长
+        trimmed_total = sum(s1 - s0 for s0, s1 in intervals if s1 - s0 >= min_silence_ms)
         logger.info(
-            f"[_trim_long_silence] 剪掉 {sum(s1-s0 for s0,s1 in intervals if s1-s0>=min_silence_ms)/1000:.1f}s "
-            f"大段静默（{sum(1 for s0,s1 in intervals if s1-s0>=min_silence_ms)} 段 ≥{min_silence_ms}ms），"
-            f"原 {total_ms/1000:.1f}s → 现 {len(out)/1000:.1f}s"
+            f"[_trim_long_silence] 源 {total_ms/1000:.1f}s → 剪 {trimmed_total/1000:.1f}s "
+            f"（{sum(1 for s0, s1 in intervals if s1-s0>=min_silence_ms)} 段 ≥{min_silence_ms}ms），"
+            f"保留 {len(merged)} 段语音，剪后 {len(out)/1000:.1f}s"
+            + ("" if trimmed_total > 0 else "（未检测到 ≥ 阈值的静默段，未剪）")
         )
         return out
 
     def _split_for_qq_voice(self, audio_path: Path, song_name: str = "",
                             trim_silence: bool = False,
-                            out_dir: Optional[Path] = None) -> List[str]:
+                            out_dir: Optional[Path] = None,
+                            split: bool = True) -> List[str]:
         """把长音频按"句子边界"切成 50-59s 的小段，供 QQ 语音（1分钟上限）发送。
 
         核心原则：切分点必须落在**句子间静音低谷**，不能切进完整的一句。
@@ -1183,11 +1249,19 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
 
             # 清唱模式：先剪掉大段间奏静音，保留换气/小停顿
             if trim_silence:
-                audio = self._trim_long_silence(audio, keep_gap_ms=self.trim_keep_gap_ms)
+                audio = self._trim_long_silence(
+                    audio,
+                    keep_gap_ms=self.trim_keep_gap_ms,
+                    silence_dbfs=self.trim_silence_dbfs,
+                    min_silence_ms=self.trim_min_silence_ms,
+                )
 
             total_ms = len(audio)
-            logger.info(f"[_split_for_qq_voice] 源音频 {total_ms/1000:.1f}s，开始切分"
-                         + ("（清唱：已剪大段间奏静音）" if trim_silence else ""))
+            logger.info(
+                f"[_split_for_qq_voice] 源音频 {total_ms/1000:.1f}s"
+                + ("（清唱：已剪大段间奏静音）" if trim_silence else "")
+                + ("" if split else "，auto_split 关闭，整段直发")
+            )
 
             # 输出基目录：未指定 out_dir 时用默认输出目录
             base_out = out_dir if out_dir is not None else self.output_dir
@@ -1200,6 +1274,16 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                     out.parent.mkdir(parents=True, exist_ok=True)
                     audio.export(str(out), format="mp3", bitrate="192k")
                     logger.info(f"[_split_for_qq_voice] 剪后 {total_ms/1000:.1f}s <=59.5s，导出单段 {out}")
+                    return [str(out)]
+                return [str(audio_path)]
+
+            # auto_split 关闭：不切分，整段直发（>60s 可能被 QQ 语音拒收/截断，用户自担）
+            if not split:
+                logger.info(f"[_split_for_qq_voice] auto_split 关闭，整段 {total_ms/1000:.1f}s 直发（不切分）")
+                if trim_silence:
+                    out = base_out / f"{song_name or 'cover'}_trimmed.mp3"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    audio.export(str(out), format="mp3", bitrate="192k")
                     return [str(out)]
                 return [str(audio_path)]
 
@@ -1259,11 +1343,9 @@ QQ 语音消息有 1 分钟上限。长音频会自动按**句子停顿处**切�
                 parts.append(audio[cursor_ms:best_cut])
                 cursor_ms = best_cut
 
-            # 导出为 mp3
-            # 丢弃尾巴：若最后一段 < 8s（太短的碎片），直接不要了
+            # 末尾短尾巴（最后几秒）不再丢弃，照常作为最后一段发送
             if len(parts) > 1 and len(parts[-1]) < 8000:
-                logger.info(f"[_split_for_qq_voice] 末尾碎片 {len(parts[-1])/1000:.1f}s < 8s，已丢弃")
-                parts.pop()
+                logger.info(f"[_split_for_qq_voice] 末尾 {len(parts[-1])/1000:.1f}s 保留（不丢弃）")
 
             stem = song_name or "cover"
             parts_dir = base_out / f"{stem}_parts"

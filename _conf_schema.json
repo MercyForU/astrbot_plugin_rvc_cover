@@ -91,6 +91,22 @@
     "minimum": 0,
     "maximum": 5000
   },
+  "trim_silence_dbfs": {
+    "description": "清唱静音修剪的静音判定阈值（dBFS）",
+    "type": "float",
+    "hint": "RMS 低于此值的 50ms 窗口判为静音。RVC 清唱里的间奏常带底噪/混响尾巴，-42 往往不够敏感。默认 -36（更激进）；若还剪不动可继续调低到 -48/-54（越负越容易判成静音，也越容易误剪真句）。只影响清唱，正常翻唱不裁剪。",
+    "default": -36.0,
+    "minimum": -80,
+    "maximum": -20
+  },
+  "trim_min_silence_ms": {
+    "description": "清唱静音修剪的最短静默段长度（毫秒）",
+    "type": "int",
+    "hint": "只有连续静默 ≥ 此值的段才被剪掉。默认 1500ms（保守，保护换气/节奏停顿）；想更激进（剪掉 0.8s 的停顿）可调到 800；想更保守（只剪 ≥2s 的间奏）可调到 2000。只影响清唱，正常翻唱不裁剪。",
+    "default": 1500,
+    "minimum": 200,
+    "maximum": 5000
+  },
   "jkapi_api_key": {
     "description": "jkapi.com 音乐接口密钥（必填）",
     "type": "string",
@@ -131,5 +147,11 @@
     "type": "int",
     "hint": "LLM 调用翻唱工具的超时时间，应 ≥ request_timeout",
     "default": 300
+  },
+  "auto_split": {
+    "description": "长音频自动切分为 50-59s 段发送（QQ 语音 1 分钟上限）",
+    "type": "bool",
+    "hint": "true（默认）= 长音频按句子边界自动切成 50-59s 小段，逐段按顺序发送；false = 不切分，整段直发（>60s 可能被 QQ 语音拒收/截断，由用户自担）。末尾短尾巴（<8s）不再丢弃，照常发送。",
+    "default": true
   }
 }

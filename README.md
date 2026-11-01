@@ -94,9 +94,12 @@
 | `comfort_low` | string | `"A3"` | 自适应变调舒适区低音（音名） |
 | `comfort_high` | string | `"A5"` | 自适应变调舒适区高音（音名） |
 | `trim_keep_gap_ms` | int | `1000` | 清唱静音修剪保留的自然间隙（ms），越大节奏越舒缓（0~5000，只影响清唱） |
+| `trim_silence_dbfs` | float | `-36.0` | 清唱静音判定阈值（dBFS），RMS 低于此值判为静音。间奏剪不动时调低（-48/-54 更激进，越容易误剪） |
+| `trim_min_silence_ms` | int | `1500` | 最短静默段长度（ms），只有连续静默 ≥ 此值才剪。默认保守（保护换气/节奏停顿）；想更激进修 800，更保守修 2000 |
 | `search_timeout` | int | `15` | jkapi 搜索超时（秒） |
 | `request_timeout` | int | `300` | 翻唱请求超时（秒） |
 | `llm_tool_timeout` | int | `300` | LLM 工具超时（秒），应 ≥ `request_timeout` |
+| `auto_split` | bool | `true` | 长音频自动切分为 50-59s 段发送（QQ 语音 1 分钟上限）。`true`=按句子边界切段逐段发送；`false`=不切分整段直发（>60s 可能被 QQ 拒收/截断，用户自担）。末尾短尾巴（<8s）不再丢弃 |
 | `output_dir` | string | `"output"` | 填绝对路径则全局固定该目录；不填时：会话调用（`/cover`、LLM 翻唱）按发起会话写入 `data/workspaces/`（私信→`_FriendMessage_{QQ号}/rvc_cover`，群聊→`_GroupMessage_{群号}/rvc_cover`），非会话调用（测试/CLI）写入插件数据目录 `data/plugin_data/astrbot_plugin_rvc_cover/` |
 
 ### `uvr_choice` 接受的精确值（字符串全等匹配）
@@ -220,10 +223,15 @@ LLM 行为约定：
 
 ## 📱 语音发送说明
 
-QQ 语音消息有 **1 分钟上限**。长音频会自动按**句子停顿处**切成 50~59 秒小段
-（`{歌名}_parts/partN.mp3`，位于上述输出目录中），并**按顺序**逐段发送（每段间隔 2 秒），不会切进完整的一句。
+QQ 语音消息有 **1 分钟上限**。
 
-LLM 工具返回结果会列出所有分段路径，模型据此按顺序发语音。
+**`auto_split` 开启（默认 `true`）：**
+长音频会自动按**句子停顿处**切成 50~59 秒小段（`{歌名}_parts/partN.mp3`，位于上述输出目录中），并**按顺序**逐段发送（每段间隔 2 秒），不会切进完整的一句。末尾短尾巴（<8s）不再丢弃，照常作为最后一段发送。
+
+**`auto_split` 关闭（`false`）：**
+不切分，整段直发。超过 60s 的音频可能被 QQ 语音拒收或截断，由用户自行承担。清唱模式下仍会先剪掉大段间奏静音，但不会按句子切段。
+
+LLM 工具返回结果会列出所有分段路径（`auto_split` 开启时），模型据此按顺序发语音。
 
 ---
 
