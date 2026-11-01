@@ -156,6 +156,13 @@ class RVCSvcPluginV2(Star):
     ) -> str:
         '''使用 RVCSVC-API 翻唱歌曲（jkapi 搜索直链 + UVR5 人声分离 + 变声一体化）
 
+        说明：
+        - 若插件开启了 split_duet 配置（男女合唱分声部变调），后端会自动检测双声部，
+          每段用各自最优升降调推理再拼回整轨，避免男女合唱时男声正常女声撕裂。
+          LLM 无需为此传参，由插件配置决定。
+        - 若用户提到"男女合唱""双声部""一男一女唱""KTV 对唱"等，可提示用户
+          "已自动处理分声部变调"（前提是 split_duet=true）。
+
         Args:
             song_name(string): 要翻唱的歌曲名称
             artist_name(string, optional): 歌手名称（有指定版本时务必填入）
