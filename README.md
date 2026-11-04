@@ -4,23 +4,23 @@
 
 # **前置依赖**：
 
-**手动**部署（请**不要使用**EDGE浏览器获取，大文件在EDGE浏览器可能会**卡99.9%**）：
+🤟**手动**部署（请**不要使用**EDGE浏览器获取，大文件在EDGE浏览器可能会**卡99.9%**）：
   
-  **一键轻松部署大力气版超级整合包**：
+  **一键轻松部署大力气版超级整合包**（rvc_cover_backend_?）：
 
   依据你的**显卡型号**选择合适的版本：
-  **rvc_cover_backend_?**：
-  [N卡50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)[10.9GB]
-  [N卡非50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)[11.0GB]
-  [A卡系列（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)[8.82GB]
+  
+  [N卡50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)[10.9GB]； 
+  [N卡非50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)[11.0GB]； 
+  [A卡系列（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)[8.82GB]；
 
   **已部署**上个版本的**补丁包**：[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)[346MB]
   
-  **已部署RVC-Project**请选择：[RVCSVC-API-Pro-V2.0国内镜像](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)
+  **已部署RVC-Project**请选择：[RVCSVC-API-Pro-V2.0国内镜像](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)[4.84GB]
   
 
 
-或者**许愿式**部署：
+🌠或者**许愿式**部署：
 
   将下面这段提示词发送给任意可调用工具的Agent（如果需要指定路径请自行添加提示词）：
   
