@@ -1,163 +1,240 @@
 {
-  "rvc_base_url": {
-    "description": "RVCSVC-API 后端服务地址",
-    "type": "string",
-    "hint": "RVCSVC-API（app_rvc.py）Gradio 服务地址，默认 http://127.0.0.1:7860。后端内部代理到 7897 RVC 推理服务。",
-    "default": "http://127.0.0.1:7860"
+  "backend_config": {
+    "description": "🔧【后端配置】",
+    "type": "object",
+    "items": {
+      "remote_access": {
+        "description": "远程访问模式",
+        "type": "bool",
+        "hint": "开启后：优先使用后端返回的 url 字段（完整下载 URL），适合远程服务；关闭时：优先使用 path 字段并转为下载 URL，适合本地服务。",
+        "default": false
+      },
+      "rvc_base_url": {
+        "description": "后端服务地址",
+        "type": "string",
+        "hint": "RVCSVC-API Gradio 服务地址，默认 http://127.0.0.1:7860。远程访问模式需要修改到对应地址，必须带 http(s):// 参考：http(s)://[域名].[端口] 例如：http://xxx.com:6666后面不用再加/。",
+        "default": "http://127.0.0.1:7860"
+      }
+    }
   },
-  "default_model": {
-    "description": "默认使用的 RVC 模型文件名",
-    "type": "string",
-    "hint": "翻唱时默认使用的 RVC 模型（如 wuxiV1.pth / guanguanV1.pth / kikiV1.pth / tingyun.pth / youzhanv2-xi.pth），留空则用后端默认",
-    "default": ""
+  "main_vocal_config": {
+    "description": "🎤【主唱配置】",
+    "type": "object",
+    "items": {
+      "default_model": {
+        "description": "默认 RVC 模型",
+        "type": "string",
+        "hint": "翻唱时默认使用的 RVC 模型（.pth文件 详细见：RVC模型\\assets\\weights文件夹中 如：guanguanV1.pth / kikiV1.pth ），留空则用后端默认",
+        "default": "kikiV1.pth"
+      },
+      "adaptive_shift": {
+        "description": "自适应变调开关",
+        "type": "bool",
+        "hint": "开启 = 升降调为 0 时自动按纯人声音域+舒适区音域计算最优变调值，强烈建议根据模型音域修改舒适区后开启！",
+        "default": true
+      },
+      "comfort_high": {
+        "description": "舒适区高音",
+        "type": "string",
+        "hint": "自适应变调参考的舒适区最高音，这里按声部给出几个参考值,高音部分：女/男高音: A5/G4 女/男中音: F5/E4 女/男低音: D5/C4。",
+        "default": "F5"
+      },
+      "comfort_low": {
+        "description": "舒适区低音",
+        "type": "string",
+        "hint": "自适应变调参考的舒适区最低音，这里按声部给出几个参考值,低音部分：女/男高音: C4/B2 女/男中音: A3/G2 女/男低音: F3/E2。",
+        "default": "A3"
+      }
+    }
   },
-  "reverb_intensity": {
-    "description": "混响强度（0干声~10宏大）",
-    "type": "int",
-    "hint": "后端 pedalboard Reverb 混响档位：0=干声无混响，4=默认（适中），10=宏大。数值越大混响越明显。",
-    "default": 4,
-    "minimum": 0,
-    "maximum": 10
+  "music_search": {
+    "description": "🔍【音乐搜索】",
+    "type": "object",
+    "items": {
+      "jkapi_api_key": {
+        "description": "jkapi 密钥（必填）",
+        "type": "string",
+        "hint": "注册 https://jkapi.com 后在用户中心获取 apiKey。留空则搜索/翻唱不可用。",
+        "default": ""
+      },
+      "jkapi_plat": {
+        "description": "搜索平台",
+        "type": "string",
+        "options": [
+          "qq",
+          "wy"
+        ],
+        "labels": [
+          "QQ音乐",
+          "网易云音乐"
+        ],
+        "default": "qq",
+        "hint": "意思就是搜索音乐的平台"
+      },
+      "search_timeout": {
+        "description": "搜索超时(秒)",
+        "type": "int",
+        "hint": "搜索接口的最长等待时间。建议 ≥30。默认 30。",
+        "default": 30,
+        "minimum": 5,
+        "maximum": 60
+      }
+    }
   },
-  "delay_intensity": {
-    "description": "回声(延迟)效果强度（0关闭~10明显）",
-    "type": "int",
-    "hint": "后端 pedalboard Delay 回声档位：0=关闭，数值越大回声越明显（内部映射为 0.5 秒延迟、mix 最高 0.35）。",
-    "default": 0,
-    "minimum": 0,
-    "maximum": 10
+  "output_rules": {
+    "description": "📤【输出规则】",
+    "type": "object",
+    "items": {
+      "auto_split": {
+        "description": "自动切分",
+        "type": "bool",
+        "hint": "false（默认）= 高版本QQ支持长语音，不切分，整段直接发送。 发送语音出现问题可以打开此选项。",
+        "default": false
+      },
+      "output_dir": {
+        "description": "输出目录",
+        "type": "string",
+        "hint": "填绝对路径（如 D:/covers）则所有输出固定写入该目录。不填/相对路径时：会话调用（/cover、LLM 翻唱）按发起会话自动写入 AstrBot 会话工作区（私信→data/workspaces/_FriendMessage_{QQ号}/rvc_cover，群聊→data/workspaces/_GroupMessage_{群号}/rvc_cover）；非会话调用（测试/CLI）固定写入 AstrBot 插件数据目录 data/plugin_data/astrbot_plugin_rvc_cover/。",
+        "default": "output"
+      },
+      "request_timeout": {
+        "description": "请求超时(秒)",
+        "type": "int",
+        "hint": "RVCSVC-API 处理翻唱的最大等待时间，歌曲较长/分离模型复杂时需要适当调大",
+        "default": 120,
+        "minimum": 30,
+        "maximum": 600
+      },
+      "llm_tool_timeout": {
+        "description": "LLM 工具超时(秒)",
+        "type": "int",
+        "hint": "LLM 调用翻唱工具的超时时间，应 ≥ 请求超时(秒)（AstrBot配置文件-AI-高级-工具调用超时时间(秒)默认是120秒，想要此选项生效需要改动Astrbot设置）",
+        "default": 120
+      }
+    }
   },
-  "default_key_shift": {
-    "description": "歌曲人声升降调默认值（半音）",
-    "type": "int",
-    "hint": "未指定 -k 时的默认升降调，-12 到 12，默认 0。女唱男推荐 +6，男唱女推荐 -6。",
-    "default": 0,
-    "minimum": -12,
-    "maximum": 12
+  "effects": {
+    "description": "🎛【效果器】",
+    "type": "object",
+    "items": {
+      "uvr_choice": {
+        "description": "人声分离模型 (UVR)",
+        "type": "string",
+        "options": [
+          "VR-HP5 (默认)",
+          "MSST BS-Roformer",
+          "MSST 串联管线 (becruily_deux + 去混响)"
+        ],
+        "labels": [
+          "VR-HP5 (默认)",
+          "MSST BS-Roformer",
+          "MSST 串联管线 (becruily_deux + 去混响)"
+        ],
+        "default": "VR-HP5 (默认)",
+        "hint": "人声分离算法：VR-HP5 (默认) 速度快；MSST BS-Roformer 精度高；MSST 串联管线 (becruily_deux + 去混响) 两步提干声+去混响。"
+      },
+      "reverb_intensity": {
+        "description": "混响强度（0干声~10宏大）",
+        "type": "int",
+        "hint": "后端 pedalboard Reverb 混响档位：0=干声无混响，4=默认（适中），10=宏大。数值越大混响越明显。",
+        "default": 4,
+        "minimum": 0,
+        "maximum": 10
+      },
+      "delay_intensity": {
+        "description": "延迟/回声强度（0关闭~10明显）",
+        "type": "int",
+        "hint": "后端 pedalboard Delay 回声档位：0=关闭，数值越大回声越明显（内部映射为 0.5 秒延迟、mix 最高 0.35）。",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 10
+      },
+      "default_key_shift": {
+        "description": "默认升降调（半音）",
+        "type": "int",
+        "hint": "未指定 -k 时的默认升降调，-12 到 12，默认 0。女唱男推荐 +6，男唱女推荐 -6。",
+        "default": 0,
+        "minimum": -12,
+        "maximum": 12
+      },
+      "default_vocal_vol": {
+        "description": "人声音量（dB）",
+        "type": "int",
+        "hint": "调节人声音量的默认值，-3 到 3（后端滑动条范围），默认 0。",
+        "default": 0,
+        "minimum": -3,
+        "maximum": 3
+      },
+      "default_inst_vol": {
+        "description": "伴奏音量（dB）",
+        "type": "int",
+        "hint": "调节伴奏音量的默认值，-3 到 3（后端滑动条范围），默认 0。",
+        "default": 0,
+        "minimum": -3,
+        "maximum": 3
+      },
+      "trim_keep_gap_ms": {
+        "description": "清唱间隙(ms)",
+        "type": "int",
+        "hint": "清唱模式剪掉大段间奏静音后，句间保留的停顿时长。值越大节奏越舒缓，越小越紧凑。默认 1000ms。只影响清唱，正常翻唱不裁剪。",
+        "default": 1000,
+        "minimum": 0,
+        "maximum": 5000
+      },
+      "trim_silence_dbfs": {
+        "description": "静音阈值(dBFS)",
+        "type": "float",
+        "hint": "RMS 低于此值的 50ms 窗口判为静音。RVC 清唱里的间奏常带底噪/混响尾巴，-42 往往不够敏感。默认 -36（更激进）；若还剪不动可继续调低到 -48/-54（越负越容易判成静音，也越容易误剪真句）。只影响清唱，正常翻唱不裁剪。",
+        "default": -36.0,
+        "minimum": -80,
+        "maximum": -20
+      },
+      "trim_min_silence_ms": {
+        "description": "最短静默(ms)",
+        "type": "int",
+        "hint": "只有连续静默 ≥ 此值的段才被剪掉。默认 1500ms（保守，保护换气/节奏停顿）；想更激进（剪掉 0.8s 的停顿）可调到 800；想更保守（只剪 ≥2s 的间奏）可调到 2000。只影响清唱，正常翻唱不裁剪。",
+        "default": 1500,
+        "minimum": 200,
+        "maximum": 5000
+      }
+    }
   },
-  "default_vocal_vol": {
-    "description": "人声音量默认值（dB）",
-    "type": "int",
-    "hint": "调节人声音量的默认值，-3 到 3（后端滑动条范围），默认 0。",
-    "default": 0,
-    "minimum": -3,
-    "maximum": 3
-  },
-  "default_inst_vol": {
-    "description": "伴奏音量默认值（dB）",
-    "type": "int",
-    "hint": "调节伴奏音量的默认值，-3 到 3（后端滑动条范围），默认 0。",
-    "default": 0,
-    "minimum": -3,
-    "maximum": 3
-  },
-  "uvr_choice": {
-    "description": "人声分离模型 (UVR)",
-    "type": "string",
-    "hint": "人声分离算法：VR-HP5 (默认) 速度快；MSST BS-Roformer 精度高；MSST 串联管线 (becruily_deux + 去混响) 两步提干声+去混响。",
-    "default": "VR-HP5 (默认)",
-    "enum": ["VR-HP5 (默认)", "MSST BS-Roformer", "MSST 串联管线 (becruily_deux + 去混响)"]
-  },
-  "f0_method": {
-    "description": "F0 音高提取算法",
-    "type": "string",
-    "hint": "RVC 推理时的音高提取算法：rmvpe=默认精度最高；pm=旧版；fcpe=全卷积轻量模型。",
-    "default": "rmvpe",
-    "enum": ["rmvpe", "pm", "fcpe"]
-  },
-  "adaptive_shift": {
-    "description": "开关：启用/关闭自适应变调",
-    "type": "bool",
-    "hint": "开启 = 升降调为 0 时自动按纯人声音域+舒适区音域计算最优变调值；关闭 = 始终用配置/命令里的升降调值。默认开启。也可在运行时用 /setadaptive on|off 临时切换。",
-    "default": true
-  },
-  "comfort_low": {
-    "description": "舒适区低音（音名）",
-    "type": "string",
-    "hint": "自适应变调参考的舒适区最低音，如 A3 / C4 / G3。",
-    "default": "A3"
-  },
-  "comfort_high": {
-    "description": "舒适区高音（音名）",
-    "type": "string",
-    "hint": "自适应变调参考的舒适区最高音，如 A5 / C6 / G4。",
-    "default": "A5"
-  },
-  "trim_keep_gap_ms": {
-    "description": "清唱静音修剪保留的自然间隙（毫秒）",
-    "type": "int",
-    "hint": "清唱模式剪掉大段间奏静音后，句间保留的停顿时长。值越大节奏越舒缓，越小越紧凑。默认 1000ms。只影响清唱，正常翻唱不裁剪。",
-    "default": 1000,
-    "minimum": 0,
-    "maximum": 5000
-  },
-  "trim_silence_dbfs": {
-    "description": "清唱静音修剪的静音判定阈值（dBFS）",
-    "type": "float",
-    "hint": "RMS 低于此值的 50ms 窗口判为静音。RVC 清唱里的间奏常带底噪/混响尾巴，-42 往往不够敏感。默认 -36（更激进）；若还剪不动可继续调低到 -48/-54（越负越容易判成静音，也越容易误剪真句）。只影响清唱，正常翻唱不裁剪。",
-    "default": -36.0,
-    "minimum": -80,
-    "maximum": -20
-  },
-  "trim_min_silence_ms": {
-    "description": "清唱静音修剪的最短静默段长度（毫秒）",
-    "type": "int",
-    "hint": "只有连续静默 ≥ 此值的段才被剪掉。默认 1500ms（保守，保护换气/节奏停顿）；想更激进（剪掉 0.8s 的停顿）可调到 800；想更保守（只剪 ≥2s 的间奏）可调到 2000。只影响清唱，正常翻唱不裁剪。",
-    "default": 1500,
-    "minimum": 200,
-    "maximum": 5000
-  },
-  "jkapi_api_key": {
-    "description": "jkapi.com 音乐接口密钥（必填）",
-    "type": "string",
-    "hint": "翻唱音源唯一入口：GET https://jkapi.com/api/music（name=歌名&plat=qq|wy&type=json&apiKey=密钥），搜出音频直链后交给后端下载翻唱。注册 https://jkapi.com 后在用户中心获取 apiKey。留空则搜索/翻唱不可用。",
-    "default": ""
-  },
-  "jkapi_plat": {
-    "description": "默认搜索平台",
-    "type": "string",
-    "hint": "qq=QQ音乐（默认），wy=网易云音乐。可用 /setplat 或命令参数 -p 临时切换。",
-    "default": "qq",
-    "enum": ["qq", "wy"]
-  },
-  "search_timeout": {
-    "description": "歌曲搜索超时(秒)",
-    "type": "int",
-    "hint": "jkapi 搜索接口无响应时的最长等待时间",
-    "default": 15,
-    "minimum": 5,
-    "maximum": 60
-  },
-  "output_dir": {
-    "description": "音频输出目录",
-    "type": "string",
-    "hint": "填绝对路径（如 D:/covers）则所有输出固定写入该目录。不填/相对路径时：会话调用（/cover、LLM 翻唱）按发起会话自动写入 AstrBot 会话工作区（私信→data/workspaces/_FriendMessage_{QQ号}/rvc_cover，群聊→data/workspaces/_GroupMessage_{群号}/rvc_cover）；非会话调用（测试/CLI）固定写入 AstrBot 插件数据目录 data/plugin_data/astrbot_plugin_rvc_cover/。",
-    "default": "output"
-  },
-  "request_timeout": {
-    "description": "翻唱请求超时(秒)",
-    "type": "int",
-    "hint": "RVCSVC-API 处理翻唱的最大等待时间，歌曲较长/分离模型复杂时可适当调大",
-    "default": 300,
-    "minimum": 30,
-    "maximum": 600
-  },
-  "llm_tool_timeout": {
-    "description": "LLM 工具调用超时(秒)",
-    "type": "int",
-    "hint": "LLM 调用翻唱工具的超时时间，应 ≥ request_timeout",
-    "default": 300
-  },
-  "auto_split": {
-    "description": "长音频自动切分为 50-59s 段发送（QQ 语音 1 分钟上限）",
-    "type": "bool",
-    "hint": "true（默认）= 长音频按句子边界自动切成 50-59s 小段，逐段按顺序发送；false = 不切分，整段直发（>60s 可能被 QQ 语音拒收/截断，由用户自担）。末尾短尾巴（<8s）不再丢弃，照常发送。",
-    "default": true
-  },
-  "split_duet": {
-    "description": "分声部变调（男女合唱 / 双声部）",
-    "type": "bool",
-    "hint": "true = 翻唱前后端自动检测双声部（整轨 F0 双峰 + 全 bin 候选池同区去重 + 峰组能量 ≥ 10% + 两峰间距 ≥ 7 半音），每段用各自最优升降调推理再拼回整轨，避免男女合唱时男声正常女声撕裂；false（默认）= 整轨用同一升降调推理。单声部歌曲即使开启也会自动检测失败、回退整轨，零开销。任一段推理失败用原人声兜底，整轨仍可导出。",
-    "default": false
+  "experimental": {
+    "description": "🧪【实验性功能】",
+    "type": "object",
+    "items": {
+      "split_duet": {
+        "description": "分声部变调",
+        "type": "bool",
+        "hint": "true = 翻唱时后端先做男/女声部提纯，分别用主唱音色和伴唱音色进行自适应变调，耗时较长！（由于当前技术发展问题，男/女声部提纯模型尚处于实验阶段，仅能对低混响、音色差异明显的音乐耦合性好，想要更好的效果需要调整音域和效果器精校，建议进入WebUI操作：默认 http://127.0.0.1:7860）以下设置仅在分声部变调开启时生效。",
+        "default": false
+      },
+      "harmony_model": {
+        "description": "伴唱音色",
+        "type": "string",
+        "hint": "双声道模式下，伴唱（副声轨）使用的 RVC 模型文件名（如 kikiV1.pth）。留空 = 跟主唱（主声轨）用同一模型（注意如果将RVC音色模型V1版和V2版混用可能出现奇怪的问题）。",
+        "default": ""
+      },
+      "harmony_comfort_high": {
+        "description": "伴唱舒适区高音",
+        "type": "string",
+        "hint": "双声道模式下，伴唱（副声轨）自适应变调的舒适区最高音，这里按声部给出几个参考值,高音部分：女/男高音: A5/G4 女/男中音: F5/E4 女/男低音: D5/C4。",
+        "default": "A4"
+      },
+      "harmony_comfort_low": {
+        "description": "伴唱舒适区低音",
+        "type": "string",
+        "hint": "双声道模式下，伴唱（副声轨）自适应变调的舒适区最低音，这里按声部给出几个参考值,低音部分：女/男高音: C4/B2 女/男中音: A3/G2 女/男低音: F3/E2。",
+        "default": "F3"
+      },
+      "harmony_vol": {
+        "description": "伴唱音量(dB)",
+        "type": "int",
+        "hint": "双声道模式下，伴唱（副声轨）相对主唱的音量偏移 dB，范围 -20 到 +10。默认 0。建议 -6（伴唱轻一点）。",
+        "default": 0,
+        "minimum": -20,
+        "maximum": 10
+      }
+    }
   }
 }

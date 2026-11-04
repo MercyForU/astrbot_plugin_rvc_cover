@@ -25,8 +25,8 @@ from .api import JKApiMusicAPI
 @register(
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
-    "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "1.1.5",
+    "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，重要！请先查看文档部署依赖，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
+    "2.0.0",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
@@ -36,49 +36,76 @@ class RVCSvcPluginV2(Star):
         super().__init__(context)
         self.config = config
 
+        # ==================== 扁平化嵌套配置 ====================
+        # AstrBot 生成的配置文件 (data/config/<plugin>_config.json) 保持 schema 的分组结构，
+        # 但没有 schema 中的 "items" 包装层。例如：
+        # schema:  {"backend_config": {"type": "object", "items": {"rvc_base_url": {...}}}}
+        # config:  {"backend_config": {"rvc_base_url": "http://..."}}
+        # 这里把所有分组的值直接合并成扁平 dict，保持后续 get_cfg() 兼容
+        flat_config = {}
+        if isinstance(config, dict):
+            for group_key, group_val in config.items():
+                if isinstance(group_val, dict):
+                    # 分组对象：直接合并其键值对
+                    flat_config.update(group_val)
+                else:
+                    # 兼容旧扁平结构：顶层直接是键值对
+                    flat_config[group_key] = group_val
+        # 优先用扁平化后的配置，回退到原 config（兜底）
+        get_cfg = lambda k, d=None: flat_config.get(k, config.get(k, d))
+
         # RVCSVC-API 配置（后端只接受音频下载直链）
-        self.base_url = config.get("rvc_base_url", "http://127.0.0.1:7860").rstrip("/")
-        self.default_model = config.get("default_model", "")
+        self.base_url = get_cfg("rvc_base_url", "http://127.0.0.1:7860").rstrip("/")
+        self.default_model = get_cfg("default_model", "")
         # 混响强度：0(干声) ~ 10(宏大)，默认 4（后端"默认值"）
-        self.reverb_intensity = config.get("reverb_intensity", 4)
+        self.reverb_intensity = get_cfg("reverb_intensity", 4)
         # 回声(延迟)效果：0(关闭) ~ 10(明显)，默认 0
-        self.delay_intensity = config.get("delay_intensity", 0)
+        self.delay_intensity = get_cfg("delay_intensity", 0)
         # 歌曲人声升降调（半音），默认 0
-        self.default_key_shift = int(config.get("default_key_shift", 0))
+        self.default_key_shift = int(get_cfg("default_key_shift", 0))
         # 调节人声音量（dB），默认 0
-        self.default_vocal_vol = int(config.get("default_vocal_vol", 0))
+        self.default_vocal_vol = int(get_cfg("default_vocal_vol", 0))
         # 调节伴奏音量（dB），默认 0
-        self.default_inst_vol = int(config.get("default_inst_vol", 0))
+        self.default_inst_vol = int(get_cfg("default_inst_vol", 0))
         # 人声分离模型 (UVR)
-        self.uvr_choice = config.get("uvr_choice", "VR-HP5 (默认)")
+        self.uvr_choice = get_cfg("uvr_choice", "VR-HP5 (默认)")
         # F0 音高提取算法：rmvpe / pm / fcpe
-        self.f0_method = (config.get("f0_method", "rmvpe") or "rmvpe").lower()
+        self.f0_method = (get_cfg("f0_method", "rmvpe") or "rmvpe").lower()
         # 自适应变调：启用后，手动升降调为 0 时由后端根据纯人声+舒适区音域自动计算
-        self.adaptive_shift = bool(config.get("adaptive_shift", True))
+        self.adaptive_shift = bool(get_cfg("adaptive_shift", True))
         # 舒适区音域（音名，如 A3 / C4）
-        self.comfort_low = config.get("comfort_low", "A3") or "A3"
-        self.comfort_high = config.get("comfort_high", "A5") or "A5"
+        self.comfort_low = get_cfg("comfort_low", "A3") or "A3"
+        self.comfort_high = get_cfg("comfort_high", "A5") or "A5"
         # 清唱静音修剪：保留的自然间隙（ms）——剪掉大段间奏后句间保留的停顿
-        self.trim_keep_gap_ms = int(config.get("trim_keep_gap_ms", 1000))
+        self.trim_keep_gap_ms = int(get_cfg("trim_keep_gap_ms", 1000))
         # 清唱静音修剪：静音判定阈值（dBFS）。RVC 清唱里"间奏"常带底噪/混响尾巴，
         # RMS 不会真正到 -42 之下。默认 -36（更激进，把"几乎没声音"的段也算静音）；
         # 若还剪不动可继续调低到 -48/-54（越负越容易判成静音，越容易误剪）。
-        self.trim_silence_dbfs = float(config.get("trim_silence_dbfs", -36.0))
+        self.trim_silence_dbfs = float(get_cfg("trim_silence_dbfs", -36.0))
         # 清唱静音修剪：最短静默段长度（ms）。只有连续静默 ≥ 此值才剪。
         # 默认 1500ms（保守，保护换气/节奏停顿）；想更激进可调到 800。
-        self.trim_min_silence_ms = int(config.get("trim_min_silence_ms", 1500))
+        self.trim_min_silence_ms = int(get_cfg("trim_min_silence_ms", 1500))
         # 语音切分开关：true=长音频自动按句子边界切 50-59s 段发送（QQ 语音 1 分钟上限）
         # false=不切分，整段直发（>60s 会被 QQ 拒收/截断，由用户自担）
-        self.auto_split = bool(config.get("auto_split", True))
+        self.auto_split = bool(get_cfg("auto_split", True))
 
-        # 分声部变调（男女合唱）：开启后后端自动检测双声部，每段用各自最优升降调推理
-        self.split_duet = bool(config.get("split_duet", False))
+        # 分声部变调（男女合唱）：开启后后端做 MF 男/女提纯，男轨女轨各自按自身 F0 变调再合成
+        self.split_duet = bool(get_cfg("split_duet", False))
+
+        # 伴唱参数（仅 split_duet=true 时生效）
+        self.harmony_model = get_cfg("harmony_model", "") or ""
+        self.harmony_comfort_low = get_cfg("harmony_comfort_low", "A3") or "A3"
+        self.harmony_comfort_high = get_cfg("harmony_comfort_high", "A4") or "A4"
+        self.harmony_vol = int(get_cfg("harmony_vol", 0))
+
+        # 远程访问模式：开启后优先使用后端返回的 url 字段
+        self.remote_access = bool(get_cfg("remote_access", False))
 
         # jkapi.com 搜索配置（唯一音源，搜出音频直链喂给后端）
-        self.jkapi_key = config.get("jkapi_api_key", "")
+        self.jkapi_key = get_cfg("jkapi_api_key", "")
         # 平台：qq=QQ音乐（默认），wy=网易云音乐
-        self.jkapi_plat = (config.get("jkapi_plat", "qq") or "qq").lower()
-        self.search_timeout = config.get("search_timeout", 15)
+        self.jkapi_plat = (get_cfg("jkapi_plat", "qq") or "qq").lower()
+        self.search_timeout = get_cfg("search_timeout", 30)
 
         # 输出配置
         # 会话上下文（/cover、LLM 工具等带 event 的调用）：输出到 AstrBot 会话工作区
@@ -87,7 +114,7 @@ class RVCSvcPluginV2(Star):
         # 无会话上下文（单元测试/CLI）：固定输出到 AstrBot 插件数据目录
         #   data/plugin_data/astrbot_plugin_rvc_cover/（StarTools.get_data_dir，可迁移可审计）
         # 若 output_dir 配置为绝对路径，则全局固定使用该目录。
-        _raw_output = config.get("output_dir", "output")
+        _raw_output = get_cfg("output_dir", "output")
         if os.path.isabs(_raw_output):
             self.output_dir = Path(_raw_output)
             self._output_dir_fixed = True
@@ -112,19 +139,42 @@ class RVCSvcPluginV2(Star):
         logger.info(f"[RVC-Cover] 输出目录: {'固定 ' + str(self.output_dir) if self._output_dir_fixed else '按会话动态（data/workspaces/.../rvc_cover）'}")
 
         # 请求超时
-        self.request_timeout = config.get("request_timeout", 300)
+        self.request_timeout = get_cfg("request_timeout", 300)
 
         # LLM 工具超时设置
-        self.llm_tool_timeout = config.get("llm_tool_timeout", 300)
+        # 注意：AstrBot 框架层有 120s 工具执行硬上限（tool_loop_agent_runner），
+        # 此值仅用于插件自身等待，实际 LLM 工具调用会被 120s 先取消。
+        # 分声部双轨推理 ~120s 刚好踩线，如需 LLM 工具走通分声部需后端加速。
+        self.llm_tool_timeout = get_cfg("llm_tool_timeout", 300)
 
         # jkapi API 实例（按 plat 懒加载）
         self._api_cache: Dict[str, JKApiMusicAPI] = {}
         self._default_api = self._create_api(self.jkapi_plat)
+        # 加载自检：列出本类注册的所有 @filter.command 命令名，写入启动日志。
+        # 重启 AstrBot 后在日志里搜 "[RVC-Cover] 已注册命令" 确认命令真的加载了——
+        # 若日志里没有这行，说明 main.py 没被成功 import（pycache 旧缓存 / 模块错误）。
+        _cmd_names = []
+        for _attr in vars(self.__class__).values():
+            _registered = getattr(_attr, "__command__", None)
+            if _registered:
+                # AstrBot 的 filter.command 装饰器会在方法上挂 command 名（字符串或列表）
+                if isinstance(_registered, (list, tuple)):
+                    _cmd_names.extend(_registered)
+                else:
+                    _cmd_names.append(str(_registered))
+        # 兜底：直接从类源码里正则抓 filter.command 的字符串参数（更可靠，不依赖装饰器内部实现）
+        import re as _re
+        import inspect as _inspect
+        _src_text = _inspect.getsource(self.__class__)
+        _cmd_names = _re.findall(r'filter\.command\(\s*["\']([^"\']+)["\']\s*\)', _src_text)
         logger.info(
             f"[RVC-Cover] 初始化完成: base={self.base_url} "
             f"default_model={self.default_model or '未设置'} "
             f"plat={self.jkapi_plat} jkapi_key={'已配置' if self.jkapi_key else '未配置'}"
         )
+        logger.info(f"[RVC-Cover] 已注册命令 ({len(_cmd_names)}个): {', '.join(_cmd_names)}")
+        if not _cmd_names:
+            logger.warning("[RVC-Cover] ⚠️ 未检测到任何 @filter.command 注册！/cover /model 等指令将无法使用。请检查 main.py 是否被成功加载。")
 
     # ==================== LLM 工具注册 ====================
 
@@ -157,11 +207,17 @@ class RVCSvcPluginV2(Star):
         '''使用 RVCSVC-API 翻唱歌曲（jkapi 搜索直链 + UVR5 人声分离 + 变声一体化）
 
         说明：
-        - 若插件开启了 split_duet 配置（男女合唱分声部变调），后端会自动检测双声部，
-          每段用各自最优升降调推理再拼回整轨，避免男女合唱时男声正常女声撕裂。
+        - 若插件开启了 split_duet 配置（男女合唱分声部变调），后端会自动做男/女声部提纯，
+          男轨、女轨各自按自身 F0 算最优升降调、各自 RVC 推理，再叠加合成整轨
+          （男段用男调、女段用女调），避免男女合唱时男声正常女声撕裂。
           LLM 无需为此传参，由插件配置决定。
+        - 双声道模式下的伴唱参数（仅 split_duet=true 生效）：
+          - harmony_model: 伴唱音色（留空=跟主唱同模型）
+          - harmony_comfort_low/high: 伴唱舒适区（默认 A3-A4，男声更低）
+          - harmony_vol: 伴唱音量 dB（默认 0，建议 -6 让伴唱轻一点）
+          以上由插件配置 /setharmony 命令设置，LLM 无需传参。
         - 若用户提到"男女合唱""双声部""一男一女唱""KTV 对唱"等，可提示用户
-          "已自动处理分声部变调"（前提是 split_duet=true）。
+          "已自动处理分声部变调"（前提是 split_duet=true，且该歌是同时段男女合唱）。
 
         Args:
             song_name(string): 要翻唱的歌曲名称
@@ -479,6 +535,13 @@ class RVCSvcPluginV2(Star):
             key_shift = args.get("key_shift", self.default_key_shift)
             plat = args.get("platform", self.jkapi_plat)
 
+            # 诊断日志：确认消息确实到达 handler，并记录匹配现场（定位"没识别"类问题）
+            logger.info(
+                f"[RVC-Cover] /cover 命中: message_str={event.message_str!r} "
+                f"is_at_or_wake={event.is_at_or_wake_command} "
+                f"解析: song={song_name!r} model={model!r} key_shift={key_shift} plat={plat}"
+            )
+
             if not song_name:
                 yield event.plain_result("用法：/cover 歌名 [-p qq|wy] [-m 模型] [-k 升降调]")
                 return
@@ -557,7 +620,9 @@ class RVCSvcPluginV2(Star):
             yield event.plain_result(
                 f"🎤 正在翻唱直链音频 {direct_link}（模型: {model or '默认'}，升降调: {key_shift}）..."
             )
-            result = await self._call_convert_api(link_name, model, key_shift, direct_link, event=event)
+            result = await self._call_convert_api(
+                link_name, model, key_shift, direct_link, event=event
+            )
 
             async for msg in self._send_cover_result(event, result, link_name, prefix="直链翻唱"):
                 yield msg
@@ -707,10 +772,20 @@ class RVCSvcPluginV2(Star):
 - `/linkcover https://cdn.xxx.com/song.mp3 -m wuxiV1.pth` - 用直链翻唱
 
 **语音发送说明：**
-QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频会自动按**句子停顿处**切成
-50-59 秒的小段（`{output_dir}/{歌名}_parts/partN.mp3`），并**按顺序**逐段发送，
-不会切进完整的一句；末尾短尾巴（<8s）也会照常发送。LLM 工具返回结果也会列出所有分段路径，供模型按顺序发语音。
-`auto_split` 关闭时不切分、整段直发（>60s 可能被 QQ 拒收/截断，由用户自担）。
+`auto_split` 关闭（默认）时不切分、整段直发。
+开启后长音频会自动按**句子停顿处**切成
+50-59 秒的小段（`{output_dir}/{歌名}_parts/partN.mp3`），并**按顺序**逐段发送。
+
+**⚠️ 重要提醒（LLM 必读）：**
+翻唱完成后，LLM **必须**调用工具 `send_message_to_user` 发送语音给用户，参数格式：
+```json
+{
+  "messages": [
+    {"type": "record", "path": "音频文件路径"}
+  ]
+}
+```
+每个分段需单独调用一次 `send_message_to_user`，按顺序发送，**每条之间等待 2 秒**，避免 QQ 语音发送失败。
 
 **输出目录：**
 输出文件按**发起会话**归档到 AstrBot 的工作区目录：
@@ -726,8 +801,12 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
 - F0 音高提取: {f0}
 - 自适应变调: {adaptive_status}（舒适区 {comfort}）
 - 清唱静音间隙: {gap_ms} ms
-- 自动切分 (auto_split): {"开启（长音频按句子切 50-59s 段发送）" if self.auto_split else "关闭（整段直发，>60s 可能被 QQ 拒收）"}
-- 分声部变调 (合唱): {"开启（男女合唱自动检测双声部，各自变调后拼回）" if self.split_duet else "关闭（整轨同一升降调）"}
+- 自动切分 (auto_split): {"开启（长音频按句子切 50-59s 段发送）" if self.auto_split else "关闭（整段直发，>60s 可能被 QQ 拒收，默认关）"}
+- 分声部变调 (合唱): {"开启（男女合唱：MF 提纯男/女轨，各轨各自变调后合成）" if self.split_duet else "关闭（整轨同一升降调）"}
+- 远程访问模式: {"开启（优先使用后端 url 字段，适合远程服务）" if self.remote_access else "关闭（优先使用 path 转下载 URL，适合本地服务）"}
+- 伴唱音色: {har_model}（{"跟主唱同模型" if not self.harmony_model else self.harmony_model}，仅双声道生效）
+- 伴唱舒适区: {har_comfort}（仅双声道生效）
+- 伴唱音量: {har_vol:+d} dB（仅双声道生效）
 - 混响强度: {reverb} / 回声: {delay}
 - 默认升降调: {kshift} / 人声音量: {vvol} dB / 伴奏音量: {ivol} dB
 - jkapi 密钥: {key_status}
@@ -749,6 +828,9 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
             kshift=self.default_key_shift,
             vvol=self.default_vocal_vol,
             ivol=self.default_inst_vol,
+            har_model=self.harmony_model or "（跟主唱同模型）",
+            har_comfort=f"{self.harmony_comfort_low}-{self.harmony_comfort_high}",
+            har_vol=self.harmony_vol,
         )
         yield event.plain_result(help_text.strip())
 
@@ -844,6 +926,66 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
         self.comfort_high = new_high
         yield event.plain_result(f"✅ 已设置舒适区为: {new_low}-{new_high}")
 
+    @filter.command("setharmony")
+    @filter.command("设置伴唱")
+    async def set_harmony(self, event: AstrMessageEvent):
+        """设置伴唱参数（仅双声道模式 split_duet=true 时生效）
+
+        用法：
+        /setharmony model wuxiV2.pth     # 设置伴唱音色（留空=跟主唱同模型）
+        /setharmony comfort A3 A4       # 设置伴唱舒适区（低音 高音）
+        /setharmony vol -6              # 设置伴唱音量 dB（-20~+10，建议 -6）
+        /setharmony                      # 查看当前伴唱配置
+        """
+        args = event.message_str.split()
+        if len(args) < 2:
+            yield event.plain_result(
+                f"当前伴唱配置（仅 split_duet=true 生效）:\n"
+                f"  音色: {self.harmony_model or '（跟主唱同模型）'}\n"
+                f"  舒适区: {self.harmony_comfort_low}-{self.harmony_comfort_high}\n"
+                f"  音量: {self.harmony_vol:+d} dB\n"
+                f"用法：/setharmony model|comfort|vol <值...>"
+            )
+            return
+
+        sub = args[1].lower()
+        if sub == "model":
+            if len(args) < 3:
+                yield event.plain_result("用法：/setharmony model <模型文件名>（留空则跟主唱同模型）")
+                return
+            # 允许 "none" 或 "clear" 清空
+            val = " ".join(args[2:])
+            if val.lower() in ("none", "clear", "空", "清空"):
+                self.harmony_model = ""
+                yield event.plain_result("✅ 已清空伴唱音色（将跟主唱同模型）")
+            else:
+                self.harmony_model = val
+                yield event.plain_result(f"✅ 已设置伴唱音色: {self.harmony_model}")
+        elif sub == "comfort":
+            if len(args) < 3:
+                yield event.plain_result(f"当前伴唱舒适区: {self.harmony_comfort_low}-{self.harmony_comfort_high}\n用法：/setharmony comfort 低音 高音（如 A3 A4）")
+                return
+            new_low = args[2].upper()
+            new_high = args[3].upper() if len(args) > 3 else self.harmony_comfort_high
+            self.harmony_comfort_low = new_low
+            self.harmony_comfort_high = new_high
+            yield event.plain_result(f"✅ 已设置伴唱舒适区为: {new_low}-{new_high}")
+        elif sub == "vol":
+            if len(args) < 3:
+                yield event.plain_result(f"当前伴唱音量: {self.harmony_vol:+d} dB\n用法：/setharmony vol <dB值>（范围 -20~+10，建议 -6）")
+                return
+            try:
+                vol = int(args[2])
+                if vol < -20 or vol > 10:
+                    yield event.plain_result("❌ 伴唱音量范围: -20 到 +10 dB")
+                    return
+                self.harmony_vol = vol
+                yield event.plain_result(f"✅ 已设置伴唱音量: {vol:+d} dB")
+            except ValueError:
+                yield event.plain_result("❌ 音量必须是整数（如 -6）")
+        else:
+            yield event.plain_result(f"未知子命令: {sub}\n可用: model / comfort / vol")
+
     @filter.command("health")
     @filter.command("健康检查")
     async def health_check(self, event: AstrMessageEvent):
@@ -862,7 +1004,12 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
         if plat not in ("qq", "wy"):
             plat = "qq"
         if plat not in self._api_cache:
-            self._api_cache[plat] = JKApiMusicAPI(api_key=self.jkapi_key, plat=plat)
+            # 注入 search_timeout，让 api.py 内层 httpx 超时 = search_timeout + 5s，
+            # 避免内层比外层 asyncio.wait_for(search_timeout) 还慢导致 TimeoutError
+            self._api_cache[plat] = JKApiMusicAPI(
+                api_key=self.jkapi_key, plat=plat,
+                request_timeout=self.search_timeout,
+            )
         return self._api_cache[plat]
 
     # ==================== 翻唱 API 调用 ====================
@@ -885,11 +1032,12 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
         - 返回音频文件路径（后端本地路径，需通过 /gradio_api/file= 下载）
         - a_capella=True 时后端跳过伴奏合成，直接输出纯人声（{歌名}-清唱.mp3）
 
-        参数顺序（15 个，与后端 btn.click 注册一致）：
+        参数顺序（19 个，与后端 btn.click 注册一致，v1.1.6+）：
         [direct_link, key_shift, vocal_vol, inst_vol, model_dropdown,
          reverb_intensity, delay_intensity, uvr_choice, f0_method,
          adaptive_shift, comfort_low, comfort_high, a_capella,
-         split_duet, manual_part_splits]
+         split_duet, upload_file, harmony_model, harmony_comfort_low,
+         harmony_comfort_high, harmony_vol]
 
         event：传入当前消息事件时，输出文件写入该会话的 workspaces 目录
         （data/workspaces/_FriendMessage_{QQ号}/rvc_cover 或
@@ -897,32 +1045,80 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
         """
         out_dir = self._resolve_output_dir(event)
         try:
+            # 伴唱参数仅在双声道模式下生效
+            har_model = self.harmony_model if self.split_duet else ""
+            har_low = self.harmony_comfort_low if self.split_duet else "A3"
+            har_high = self.harmony_comfort_high if self.split_duet else "A5"
+            har_vol = self.harmony_vol if self.split_duet else 0
+
             payload = {
                 "data": [
-                    str(direct_link),                 # 音频下载直链（必填）
-                    int(key_shift),                   # 升降调
-                    self.default_vocal_vol,           # vocal_vol 人声音量 dB
-                    self.default_inst_vol,            # inst_vol 伴奏音量 dB
-                    model or "wuxiV1.pth",            # model_dropdown RVC 模型
-                    self.reverb_intensity,            # 混响强度（0干声~10宏大，默认4）
-                    self.delay_intensity,             # 回声(延迟)效果（0关闭~10明显，默认0）
-                    self.uvr_choice,                  # 人声分离模型 (UVR)
-                    self.f0_method,                   # F0 音高提取算法（rmvpe/pm/fcpe）
-                    self.adaptive_shift,              # 是否启用自适应变调（True=升降调为0时自动计算）
-                    self.comfort_low,                 # 舒适区低音（音名，如 A3）
-                    self.comfort_high,                # 舒适区高音（音名，如 A5）
-                    bool(a_capella),                  # 清唱模式（True=不合成伴奏，只出纯人声）
-                    self.split_duet,                   # 分声部变调（男女合唱，自动检测双声部）
-                    None,                              # manual_part_splits（手动切分点，插件端暂不暴露）
+                    str(direct_link),                 # 1. 音频下载直链（必填）
+                    int(key_shift),                   # 2. 升降调
+                    self.default_vocal_vol,           # 3. vocal_vol 人声音量 dB
+                    self.default_inst_vol,            # 4. inst_vol 伴奏音量 dB
+                    model or "wuxiV1.pth",            # 5. model_dropdown RVC 模型
+                    self.reverb_intensity,            # 6. 混响强度（0干声~10宏大，默认4）
+                    self.delay_intensity,             # 7. 回声(延迟)效果（0关闭~10明显，默认0）
+                    self.uvr_choice,                  # 8. 人声分离模型 (UVR)
+                    self.f0_method,                   # 9. F0 音高提取算法（rmvpe/pm/fcpe）
+                    self.adaptive_shift,              # 10. 是否启用自适应变调（True=升降调为0时自动计算）
+                    self.comfort_low,                 # 11. 主唱舒适区低音（音名，如 A3）
+                    self.comfort_high,                # 12. 主唱舒适区高音（音名，如 A5）
+                    bool(a_capella),                  # 13. 清唱模式（True=不合成伴奏，只出纯人声）
+                    self.split_duet,                   # 14. 分声部变调（双声道：MF 提纯双轨 + 各轨各自变调合成）
+                    None,                              # 15. upload_file（本地上传文件路径，直链模式传 None）
+                    har_model,                         # 16. 伴唱音色（留空=跟主唱同模型，仅 split_duet 生效）
+                    har_low,                           # 17. 伴唱舒适区低音（仅 split_duet 生效）
+                    har_high,                          # 18. 伴唱舒适区高音（仅 split_duet 生效）
+                    har_vol,                           # 19. 伴唱音量 dB（仅 split_duet 生效，-20~+10）
                 ]
             }
 
             api_url = f"{self.base_url}/gradio_api/call/convert"
 
-            # 全程使用同一个 client，避免 SSE 轮询时连接已关闭
-            client = httpx.AsyncClient(timeout=httpx.Timeout(self.request_timeout))
+            # ==================== 服务可达性预检（2s） ====================
+            # 先快速探一次 7860 根路径：
+            #   - 连不上 → 直接报"找不到 RVCSVC-API-Pro 服务"，LLM/用户立即知道后端没起来，
+            #     不用等到 client.post 的长超时（之前 120s 才报错）。
+            #   - 连得上但 5xx → 服务在但内部异常，提前报。
+            #   - 连得上 2xx/3xx → 继续正常翻唱流程。
             try:
-                resp = await client.post(api_url, json=payload)
+                async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=2.0)) as probe:
+                    probe_resp = await probe.get(f"{self.base_url}/", headers={"User-Agent": "rvc-cover-probe"})
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as probe_err:
+                logger.warning(f"[RVC-Cover] 后端不可达: {self.base_url} ({type(probe_err).__name__})")
+                return {
+                    "success": False,
+                    "error": (
+                        f"❌ 找不到 RVCSVC-API-Pro 服务（{self.base_url}）。\n"
+                        f"原因: {type(probe_err).__name__} —— 7860 端口可能没起来或进程挂了。\n"
+                        f"请检查: 1) 7860 进程是否运行 2) 端口是否被占用 3) 防火墙是否放行。"
+                    ),
+                }
+            if probe_resp.status_code >= 500:
+                return {
+                    "success": False,
+                    "error": f"❌ RVCSVC-API-Pro 服务异常（HTTP {probe_resp.status_code}），请先重启 7860",
+                }
+            logger.info(f"[RVC-Cover] 后端可达: {self.base_url} (HTTP {probe_resp.status_code})")
+
+            # SSE 长连接专用 client：
+            #   connect=10s（建连快失败快）
+            #   read=None（任务未结束时服务端 SSE 流一直挂着不推 chunk，
+            #            必须允许单次读无限挂，否则 60s 读超时会在任务还在跑时打断它，
+            #            导致"改了 request_timeout=600 也没用"的现象）
+            #   write/pool 给 30s 兜底
+            # 外层 while + deadline(self.request_timeout) 才是真正总等待上限。
+            sse_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(None, connect=10.0)
+            )
+            # 提交翻唱任务用短超时 client（避免 post 阶段挂住）
+            post_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(60.0, connect=10.0)
+            )
+            try:
+                resp = await post_client.post(api_url, json=payload)
 
                 if resp.status_code != 200:
                     return {"success": False, "error": f"提交翻唱任务失败: HTTP {resp.status_code}"}
@@ -943,7 +1139,7 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                 last_heartbeat = time.time()
                 while time.time() < deadline:
                     try:
-                        async with client.stream("GET", poll_url, timeout=httpx.Timeout(120, connect=10)) as r:
+                        async with sse_client.stream("GET", poll_url) as r:
                             text_parts = []
                             async for chunk in r.aiter_text():
                                 text_parts.append(chunk)
@@ -963,7 +1159,7 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                                     break
                             text = "".join(text_parts)
                     except httpx.TimeoutException:
-                        # 流 120s 未结束：任务仍在跑，继续等
+                        # connect 超时（建连失败）：任务可能还在跑，继续重连
                         now = time.time()
                         if now - last_heartbeat >= 15:
                             elapsed = int(now - (deadline - self.request_timeout))
@@ -972,6 +1168,8 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                         continue
                     if got_final:
                         break
+                    # 没收到 complete：SSE 流已关闭但任务没完（网络抖动），重连继续等
+                    time.sleep(2)
 
                 if not got_final:
                     return {"success": False, "error": f"翻唱超时 ({self.request_timeout}秒)"}
@@ -987,11 +1185,20 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                 if isinstance(result_data, list) and result_data:
                     item = result_data[0]
                     if isinstance(item, dict):
-                        out = item.get("path") or item.get("url")
+                        # 根据 remote_access 配置决定优先级
+                        if self.remote_access:
+                            # 远程模式：优先 url，再 path
+                            out = item.get("url") or item.get("path")
+                        else:
+                            # 本地模式：优先 path
+                            out = item.get("path") or item.get("url")
                     elif isinstance(item, str):
                         out = item
                 elif isinstance(result_data, dict):
-                    out = result_data.get("name") or result_data.get("path") or result_data.get("url")
+                    if self.remote_access:
+                        out = result_data.get("url") or result_data.get("path") or result_data.get("name")
+                    else:
+                        out = result_data.get("name") or result_data.get("path") or result_data.get("url")
                 elif isinstance(result_data, str):
                     out = result_data
 
@@ -1006,8 +1213,12 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                     encoded = urllib.parse.quote(out, safe="")
                     file_url = f"{self.base_url}/gradio_api/file={encoded}"
 
+                # 下载前：只记日志，不发消息给用户/LLM
+                logger.info("📥 [系统] 正在下载音频文件...")
+
                 try:
-                    fresp = await client.get(file_url, follow_redirects=True)
+                    # 下载结果文件：短超时即可（文件小，几秒内完成）
+                    fresp = await post_client.get(file_url, follow_redirects=True)
                     if fresp.status_code == 200 and len(fresp.content) > 0:
                         safe_name = self._sanitize_filename(Path(out).name or "cover_output.mp3")
                         local_path = out_dir / safe_name
@@ -1065,7 +1276,8 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
                     logger.error(f"下载翻唱结果失败: {dl_err}")
                     return {"success": False, "error": f"下载翻唱结果失败: {dl_err}"}
             finally:
-                await client.aclose()
+                await sse_client.aclose()
+                await post_client.aclose()
 
         except httpx.TimeoutException:
             return {"success": False, "error": f"请求超时 ({self.request_timeout}秒)"}
@@ -1450,12 +1662,25 @@ QQ 语音消息有 1 分钟上限。`auto_split` 开启（默认）时长音频�
     # ==================== 其他辅助方法 ====================
 
     def _parse_cover_args(self, message: str) -> Dict[str, Any]:
-        """解析翻唱指令参数：/cover 歌名 [-p qq|wy] [-m 模型] [-k 升降调] /linkcover 直链 ..."""
+        """解析翻唱指令参数：/cover 歌名 [-p qq|wy] [-m 模型] [-k 升降调] /linkcover 直链 ...
+
+        关键：AstrBot 唤醒检查阶段会把 wake_prefix（/）从 message_str 剥掉，
+        所以进 handler 时文本可能是 "cover 晴天"（无前缀）或 "/cover 晴天"（带前缀，
+        群聊 @ 唤醒时）。两种都要兼容：把"命令词"（cover/linkcover/capella 等，
+        带或不带 /）都从文本里剥掉，剩下的再按空格解析参数。
+        """
         args = {"song": ""}
-        # 先去掉已知的命令前缀
-        cleaned = message
-        for kw in ["/cover", "/翻唱", "/linkcover", "/直链翻唱"]:
-            cleaned = cleaned.replace(kw, " ")
+        cleaned = message.strip()
+        # 所有可能的命令词（带 / 和不带 / 都列上），先整体剥掉
+        cmd_words = [
+            "/cover", "/linkcover", "/capella", "/linkcapella", "/coverhelp",
+            "cover", "linkcover", "capella", "linkcapella", "coverhelp",
+            "翻唱", "直链翻唱", "清唱", "直链清唱", "翻唱帮助",
+        ]
+        # 用正则剥掉开头的命令词（可选 / 前缀 + 命令词 + 至少一个空格或结尾）
+        import re
+        pattern = r"^(?:/)?(?:cover|linkcover|capella|linkcapella|coverhelp|翻唱|直链翻唱|清唱|直链清唱|翻唱帮助)\b\s*"
+        cleaned = re.sub(pattern, "", cleaned, count=1)
         parts = cleaned.split()
 
         i = 0
