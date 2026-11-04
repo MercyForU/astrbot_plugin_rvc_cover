@@ -1,26 +1,31 @@
 # astrbot_plugin_rvc_cover 🎤
 
-基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨的 AstrBot AI 翻唱插件。
+## 基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨的 AstrBot AI 翻唱插件。
 
 # **前置依赖**：
 
-🤟**手动**部署（请**不要使用**EDGE浏览器获取，大文件在EDGE浏览器可能会**卡99.9%**）：
-  
-  **一键轻松部署大力气版超级整合包**（rvc_cover_backend_?）：
+## 🤟**手动**部署（请**不要使用**EDGE浏览器获取，大文件在EDGE浏览器可能会**卡99.9%**）：
 
-  依据你的**显卡型号**选择合适的版本：
   
-  [N卡50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)[10.9GB]； 
-  [N卡非50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)[11.0GB]； 
-  [A卡系列（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)[8.82GB]；
+### **一键轻松部署大力气版超级整合包**（rvc_cover_backend_X）：
 
-  **已部署**上个版本的**补丁包**：[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)[346MB]
+  依据你的**显卡型号**选择合适的版本：[N卡50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)[10.9GB]； [N卡非50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)[11.0GB]； [A卡系列（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)[8.82GB]；
+
+---
+
+### **已部署**上个版本的**补丁包**：
+
+[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)[346MB]
+
+---
+
+### **已部署RVC-Project**请选择：
+
+[RVCSVC-API-Pro-V2.0（国内镜像）](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)[4.84GB]
   
-  **已部署RVC-Project**请选择：[RVCSVC-API-Pro-V2.0国内镜像](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)[4.84GB]
-  
 
 
-🌠或者**许愿式**部署：
+## 🌠或者**许愿式**部署：
 
   将下面这段提示词发送给任意可调用工具的Agent（如果需要指定路径请自行添加提示词）：
   
@@ -30,14 +35,14 @@
 ```
 
 
-# **启动依赖**：
+## ⏯️**启动依赖**：
 
   将**一键轻松部署大力气版超级整合包**解压后运行`一键启动.bat`待其拉起两个服务，本插件方可正常使用。
   使用**补丁包**与**RVCSVC-API-Pro-V2.0**版本的需要运行RVC-Project模型中`go-webui.bat`待其完全启动后，再启动RVCSVC-API-Pro中`start_rvcapi.bat`本插件方可正常使用。
 
 
 
-# **相关链接**：
+## 🔗**相关链接**：
 
  **密钥**获取：✨[jkapi官网](https://jkapi.com)✨
  
@@ -55,7 +60,7 @@
 
 ## 🔗 前置依赖
 
-1. **RVCSVC-API-Pro**（RVCSVC-API魔改版）已启动并加载模型[RVCSVC-API-Pro获取](https://github.com/MercyForU/RVCSVC-API-Pro)
+1. **RVCSVC-API-Pro**（RVCSVC-API魔改版）已启动并加载模型[RVCSVC-API-Pro仓库](https://github.com/MercyForU/RVCSVC-API-Pro)
    - 默认 `http://127.0.0.1:7860`
    - 后端只接受音频下载直链（mp3/wav/flac/m4a 等）
    - 详见 `RVCSVC-API-Pro/README.md`
