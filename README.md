@@ -2,19 +2,19 @@
 
 基于 ✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨的 AstrBot AI 翻唱插件。
 
-**前置依赖**：
+# **前置依赖**：
 
 **手动**部署（请**不要使用**EDGE浏览器获取，大文件在EDGE浏览器可能会**卡99.9%**）：
   
   **一键轻松部署大力气版超级整合包**：
 
-    依据你的**显卡型号**选择合适的版本：
-    **rvc_cover_backend_??**：[N卡50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)10.9GB [N卡非50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)11.0GB  [A卡系列国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)8.82GB
+  依据你的**显卡型号**选择合适的版本：**rvc_cover_backend_??**：[N卡50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)10.9GB [N卡非50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)11.0GB  [A卡系列国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)8.82GB
 
   **已部署**上个版本的**补丁包**：[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)346MB
   
   **已部署RVC-Project**请选择：[RVCSVC-API-Pro-V2.0国内镜像](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)
   
+
 
 或者**许愿式**部署：
 
@@ -25,16 +25,22 @@
 下载完成后帮我解压，并为其中的：一键启动.bat 创建桌面快捷方式。
 ```
 
+
 **启动依赖**：
 
   将**一键轻松部署大力气版超级整合包**解压后运行`一键启动.bat`待其拉起两个服务，本插件方可正常使用。
   使用**补丁包**与**RVCSVC-API-Pro-V2.0**版本的需要运行RVC-Project模型中`go-webui.bat`待其完全启动后，再启动RVCSVC-API-Pro中`start_rvcapi.bat`本插件方可正常使用。
 
-**相关链接**：
 
- **密钥**获取：✨[jkapi官网](https://jkapi.com)✨ 
+
+# **相关链接**：
+
+ **密钥**获取：✨[jkapi官网](https://jkapi.com)✨
+ 
  RVC-Project仓库：✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨
+
  RVCSVC-API-Pro仓库：✨[RVCSVC-API-Pro](https://github.com/MercyForU/RVCSVC-API-Pro)✨
+
  RVCSVC-API-Pro的huggingface仓库：✨[RVCSVC-API-Pro](https://huggingface.co/MercyStar/RVCSVC-API-Pro/tree/main)✨
 
 
