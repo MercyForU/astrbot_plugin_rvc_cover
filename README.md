@@ -8,9 +8,13 @@
   
   **一键轻松部署大力气版超级整合包**：
 
-  依据你的**显卡型号**选择合适的版本：**rvc_cover_backend_??**：[N卡50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)10.9GB [N卡非50系国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)11.0GB  [A卡系列国内镜像](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)8.82GB
+  依据你的**显卡型号**选择合适的版本：
+  **rvc_cover_backend_?**：
+  [N卡50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_50.7z?download=true)[10.9GB]
+  [N卡非50系（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_N.7z?download=true)[11.0GB]
+  [A卡系列（国内镜像）](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/rvc_cover_backend_A.7z?download=true)[8.82GB]
 
-  **已部署**上个版本的**补丁包**：[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)346MB
+  **已部署**上个版本的**补丁包**：[RVCSVC-API-Pro-V2补丁](https://hf-mirror.com/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2%E8%A1%A5%E4%B8%81.rar?download=true)[346MB]
   
   **已部署RVC-Project**请选择：[RVCSVC-API-Pro-V2.0国内镜像](https://huggingface.co/MercyStar/RVCSVC-API-Pro/resolve/main/RVCSVC-API-Pro-V2.0.zip?download=true)
   
@@ -26,7 +30,7 @@
 ```
 
 
-**启动依赖**：
+# **启动依赖**：
 
   将**一键轻松部署大力气版超级整合包**解压后运行`一键启动.bat`待其拉起两个服务，本插件方可正常使用。
   使用**补丁包**与**RVCSVC-API-Pro-V2.0**版本的需要运行RVC-Project模型中`go-webui.bat`待其完全启动后，再启动RVCSVC-API-Pro中`start_rvcapi.bat`本插件方可正常使用。
@@ -44,7 +48,6 @@
  RVCSVC-API-Pro的huggingface仓库：✨[RVCSVC-API-Pro](https://huggingface.co/MercyStar/RVCSVC-API-Pro/tree/main)✨
 
 
-本插件音源**入口** [jkapi](https://jkapi.com)
 
 # 🙏🏻**特别感谢**✨[jkapi](https://jkapi.com)✨先给这样的公益大佬磕一个 **orz**
 # 🙏🏻**特别感谢**✨[RVC-Project](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)✨让小鱼开口**唱歌**成为可能
