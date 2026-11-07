@@ -26,7 +26,7 @@ from .api import JKApiMusicAPI
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
     "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，重要！请先查看文档部署依赖，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "2.0.0",
+    "2.1.0",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
@@ -88,6 +88,9 @@ class RVCSvcPluginV2(Star):
         # 语音切分开关：true=长音频自动按句子边界切 50-59s 段发送（QQ 语音 1 分钟上限）
         # false=不切分，整段直发（>60s 会被 QQ 拒收/截断，由用户自担）
         self.auto_split = bool(get_cfg("auto_split", True))
+        # LLM 工具内强制接管发送：开启后 LLM 工具翻唱完成时由插件直接 event.send 语音，
+        # 不再依赖 LLM 调用 send_message_to_user（避免 LLM 把语音发成附件/漏发）。
+        self.force_plugin_send = bool(get_cfg("force_plugin_send", False))
 
         # 分声部变调（男女合唱）：开启后后端做 MF 男/女提纯，男轨女轨各自按自身 F0 变调再合成
         self.split_duet = bool(get_cfg("split_duet", False))
@@ -170,7 +173,8 @@ class RVCSvcPluginV2(Star):
         logger.info(
             f"[RVC-Cover] 初始化完成: base={self.base_url} "
             f"default_model={self.default_model or '未设置'} "
-            f"plat={self.jkapi_plat} jkapi_key={'已配置' if self.jkapi_key else '未配置'}"
+            f"plat={self.jkapi_plat} jkapi_key={'已配置' if self.jkapi_key else '未配置'} "
+            f"force_plugin_send={'开启' if self.force_plugin_send else '关闭'}"
         )
         logger.info(f"[RVC-Cover] 已注册命令 ({len(_cmd_names)}个): {', '.join(_cmd_names)}")
         if not _cmd_names:
@@ -378,8 +382,27 @@ class RVCSvcPluginV2(Star):
             prefix = "清唱" if a_capella else "翻唱"
             suffix_note = "（纯人声，无伴奏）" if a_capella else ""
             if result.get("success"):
-                # 把切分后的所有 part 路径都告诉 LLM，让它按顺序发语音
-                parts = result.get("parts", [result.get("output_path", "")])
+                # 规整 parts（去掉空串/None），单段兜底 output_path
+                raw_parts = result.get("parts") or [result.get("output_path", "")]
+                parts = [str(p) for p in raw_parts if p]
+                if not parts and result.get("output_path"):
+                    parts = [str(result.get("output_path"))]
+
+                # ============ 插件强制接管发送（force_plugin_send） ============
+                # 开启后：工具内部直接 event.send 语音，并明确告诉 LLM「已发，别再发」。
+                # 这样即使 LLM 不懂 send_message_to_user 的 record 语法，也不会把语音发成附件。
+                if self.force_plugin_send and event is not None and parts:
+                    sent_count = await self._send_voice_parts_via_event(
+                        event, parts, display_name, prefix=prefix
+                    )
+                    return (
+                        f"✅ {prefix}完成: 《{display_name}》{suffix_note}\n"
+                        f"插件已自动通过语音消息向用户发送 {sent_count} 段音频。\n"
+                        f"⚠️ 你【绝对不要】再调用 send_message_to_user 或发送任何音频/文件给用户，"
+                        f"否则会重复发送。只需用一句话简短确认（如“已完成，请查收”）即可。"
+                    )
+
+                # ============ 原逻辑：返回提示，由 LLM 调 send_message_to_user 发送 ============
                 part_list = "\n".join(
                     [f"  第{i+1}段: {p}" for i, p in enumerate(parts)]
                 )
@@ -415,47 +438,22 @@ class RVCSvcPluginV2(Star):
         music_source: Optional[str] = None,
         event: Optional["AstrMessageEvent"] = None,
     ) -> str:
-        """清唱模式 - LLM 工具内部实现（只出纯人声，不合成伴奏）"""
-        try:
-            model = model_name or self.default_model
-            plat = (music_source or self.jkapi_plat).lower()
-            api = self._create_api(plat)
+        """清唱模式 - LLM 工具内部实现（只出纯人声，不合成伴奏）
 
-            # 1. 搜出音频直链（支持 artist_name 精确匹配）
-            search_kw = f"{song_name} {artist_name}" if artist_name else song_name
-            songs = []
-            try:
-                songs = await asyncio.wait_for(
-                    api.fetch_data(keyword=search_kw, limit=5),
-                    timeout=self.search_timeout,
-                )
-            finally:
-                try:
-                    await api.close()
-                except Exception:
-                    pass
-
-            if not songs or not songs[0].get("url"):
-                reason = "未配置 jkapi_api_key" if not self.jkapi_key else "API 未返回直链"
-                return f"未找到《{song_name}》的音频直链（{plat}平台，{reason}）"
-
-            song = songs[0]
-            direct_link = song["url"].strip()
-            display_name = song.get("name") or song_name
-
-            # 2. 调用清唱通道（_llm_rvc_cover a_capella=True，返回结果字符串）
-            return await self._llm_rvc_cover(
-                song_name=song_name,
-                artist_name=artist_name,
-                model_name=model_name,
-                key_shift=key_shift,
-                music_source=music_source,
-                a_capella=True,
-                event=event,
-            )
-        except Exception as e:
-            logger.error(f"LLM清唱失败: {traceback.format_exc()}")
-            return f"清唱失败: {e}"
+        直接复用 _llm_rvc_cover(a_capella=True)：
+        - 搜索 + 下载 + 清唱通道一体，避免旧版那样先搜一次只为校验，
+          再让 _llm_rvc_cover 又搜一次（两次结果可能不同，且多打一次 jkapi 请求）。
+        - 异常统一在 _llm_rvc_cover 内部处理（返回错误字符串），这里无需再兜底。
+        """
+        return await self._llm_rvc_cover(
+            song_name=song_name,
+            artist_name=artist_name,
+            model_name=model_name,
+            key_shift=key_shift,
+            music_source=music_source,
+            a_capella=True,
+            event=event,
+        )
 
     async def _smart_cover_process(
         self,
@@ -514,6 +512,88 @@ class RVCSvcPluginV2(Star):
             error_msg = result.get("error", "未知错误")
             logger.error(f"{prefix}失败: {error_msg}")
             yield event.plain_result(f"❌ {prefix}失败: {error_msg}")
+
+    async def _send_voice_parts_via_event(
+        self,
+        event: AstrMessageEvent,
+        parts: List[str],
+        display_name: str,
+        prefix: str = "翻唱",
+    ) -> int:
+        """在 LLM 工具内主动向用户发送语音（按段发送、每段间隔 2s）。
+
+        与 _send_cover_result 的区别：
+        - 后者是生成器（yield 结果，用于 /cover 指令流）
+        - 本方法在 async 工具函数里用 await event.send(...) 直接发送，
+          因为 LLM 工具返回值是 str 不能 yield
+
+        发送优先级（尽量保证发成「语音」而不是「附件」）：
+          1) MessageChain + Record 组件（AstrBot 语音消息）
+          2) event.record / event.record_result（不同版本 AstrBot 命名不同）
+          3) 回退 event.image(...)（历史行为，QQ 可能把它当文件/图片）
+
+        返回成功发送的段数。
+        """
+        if not parts:
+            return 0
+        total = len(parts)
+
+        if total > 1:
+            try:
+                await event.send(event.plain_result(
+                    f"🎵 {prefix}完成，正在按顺序发送 {total} 段语音（间隔 2 秒）..."
+                ))
+            except Exception as e:
+                logger.warning(f"[RVC-Cover] 发送多段提示失败: {e}")
+
+        sent = 0
+        for i, p in enumerate(parts):
+            if not p or not os.path.exists(p):
+                logger.warning(f"[RVC-Cover] 第{i+1}段文件缺失: {p}")
+                continue
+            ok = False
+
+            # 1) MessageChain + Record（首选，平台识别为语音消息）
+            try:
+                from astrbot.api.event import MessageChain
+                from astrbot.api.message_components import Record
+                await event.send(MessageChain([Record(file=str(p))]))
+                ok = True
+            except Exception as e:
+                logger.warning(f"[RVC-Cover] MessageChain+Record 发送失败: {e}")
+
+            # 2) event.record / event.record_result（兜底不同版本 AstrBot 命名）
+            if not ok:
+                for method_name in ("record_result", "record"):
+                    fn = getattr(event, method_name, None)
+                    if fn is None:
+                        continue
+                    try:
+                        await event.send(fn(str(p)))
+                        ok = True
+                        break
+                    except Exception as e:
+                        logger.warning(f"[RVC-Cover] event.{method_name} 发送失败: {e}")
+
+            # 3) 最后 fallback：image 组件（历史行为，可能被 QQ 当附件/图片）
+            if not ok:
+                try:
+                    await event.send(event.image(str(p), text=f"第 {i+1}/{total} 段"))
+                    ok = True
+                except Exception as e:
+                    logger.error(f"[RVC-Cover] 全部发送方式失败（第{i+1}段）: {e}")
+
+            if ok:
+                sent += 1
+            if i < total - 1:
+                await asyncio.sleep(2)
+
+        if total > 1:
+            try:
+                await event.send(event.plain_result(f"✅ 全部 {sent}/{total} 段已发送"))
+            except Exception:
+                pass
+        return sent
 
     # ==================== 核心翻唱命令 ====================
 
@@ -744,9 +824,30 @@ class RVCSvcPluginV2(Star):
     @filter.command("翻唱帮助")
     async def cover_help(self, event: AstrMessageEvent):
         """显示翻唱帮助信息"""
-        plat_name = "QQ音乐" if self.jkapi_plat == "qq" else "网易云音乐"
-        help_text = """
-🎤 **RVC-SVC 翻唱插件（直链模式）**
+        # 预计算各状态字符串，避免 .format() 里塞长条件表达式
+        auto_split_status = (
+            "开启（长音频按句子切 50-59s 段发送）"
+            if self.auto_split
+            else "关闭（整段直发，>60s 可能被 QQ 拒收，默认关）"
+        )
+        force_send_status = (
+            "开启（LLM 工具翻唱完成时插件直接发语音，不依赖 LLM 调 send_message_to_user）"
+            if self.force_plugin_send
+            else "关闭（LLM 根据返回提示自行调用 send_message_to_user）"
+        )
+        split_duet_status = (
+            "开启（男女合唱：MF 提纯男/女轨，各轨各自变调后合成）"
+            if self.split_duet
+            else "关闭（整轨同一升降调）"
+        )
+        remote_status = (
+            "开启（优先使用后端 url 字段，适合远程服务）"
+            if self.remote_access
+            else "关闭（优先使用 path 转下载 URL，适合本地服务）"
+        )
+        harmony_model_display = self.harmony_model or "（跟主唱同模型）"
+
+        help_text = '''🎤 **RVC-SVC 翻唱插件（直链模式）**
 
 **基本用法：**
 - `/cover 歌名` - 在默认平台（{plat}）搜索歌曲直链并翻唱
@@ -773,24 +874,21 @@ class RVCSvcPluginV2(Star):
 
 **语音发送说明：**
 `auto_split` 关闭（默认）时不切分、整段直发。
-开启后长音频会自动按**句子停顿处**切成
-50-59 秒的小段（`{output_dir}/{歌名}_parts/partN.mp3`），并**按顺序**逐段发送。
+开启后长音频会自动按**句子停顿处**切成 50-59 秒的小段（输出目录下的「歌名_parts」子目录），并**按顺序**逐段发送。
 
-**⚠️ 重要提醒（LLM 必读）：**
-翻唱完成后，LLM **必须**调用工具 `send_message_to_user` 发送语音给用户，参数格式：
-```json
-{
-  "messages": [
-    {"type": "record", "path": "音频文件路径"}
-  ]
-}
-```
-每个分段需单独调用一次 `send_message_to_user`，按顺序发送，**每条之间等待 2 秒**，避免 QQ 语音发送失败。
+`force_plugin_send` 开启后，LLM 工具（rvc_cover / a_capella_cover / smart_cover）
+翻唱完成时由**插件在工具内部直接发送语音**，不再依赖 LLM 调用 send_message_to_user。
+可避免 LLM 把语音发成附件/漏发的问题。指令（/cover 等）不受影响，仍走原发送流程。
+
+**重要提醒（LLM 必读，force_plugin_send=false 时生效）：**
+翻唱完成后，LLM **必须**调用工具 send_message_to_user 发送语音给用户，参数格式为 JSON：
+    {{"messages": [{{"type": "record", "path": "音频文件路径"}}]}}
+每个分段需单独调用一次 send_message_to_user，按顺序发送，**每条之间等待 2 秒**，避免 QQ 语音发送失败。
 
 **输出目录：**
 输出文件按**发起会话**归档到 AstrBot 的工作区目录：
-- 私信：`data/workspaces/_FriendMessage_{你的QQ号}/rvc_cover/`
-- 群聊：`data/workspaces/_GroupMessage_{群号}/rvc_cover/`
+- 私信：`data/workspaces/_FriendMessage_QQ号/rvc_cover/`
+- 群聊：`data/workspaces/_GroupMessage_群号/rvc_cover/`
 若插件配置了绝对路径的 `output_dir`，则全局固定使用该目录。
 
 **当前配置：**
@@ -801,36 +899,40 @@ class RVCSvcPluginV2(Star):
 - F0 音高提取: {f0}
 - 自适应变调: {adaptive_status}（舒适区 {comfort}）
 - 清唱静音间隙: {gap_ms} ms
-- 自动切分 (auto_split): {"开启（长音频按句子切 50-59s 段发送）" if self.auto_split else "关闭（整段直发，>60s 可能被 QQ 拒收，默认关）"}
-- 分声部变调 (合唱): {"开启（男女合唱：MF 提纯男/女轨，各轨各自变调后合成）" if self.split_duet else "关闭（整轨同一升降调）"}
-- 远程访问模式: {"开启（优先使用后端 url 字段，适合远程服务）" if self.remote_access else "关闭（优先使用 path 转下载 URL，适合本地服务）"}
-- 伴唱音色: {har_model}（{"跟主唱同模型" if not self.harmony_model else self.harmony_model}，仅双声道生效）
+- 自动切分 (auto_split): {auto_split_status}
+- LLM 工具内强制发送 (force_plugin_send): {force_send_status}
+- 分声部变调 (合唱): {split_duet_status}
+- 远程访问模式: {remote_status}
+- 伴唱音色: {har_model}（仅双声道生效）
 - 伴唱舒适区: {har_comfort}（仅双声道生效）
-- 伴唱音量: {har_vol:+d} dB（仅双声道生效）
+- 伴唱音量: {har_vol} dB（仅双声道生效）
 - 混响强度: {reverb} / 回声: {delay}
 - 默认升降调: {kshift} / 人声音量: {vvol} dB / 伴奏音量: {ivol} dB
 - jkapi 密钥: {key_status}
 - 输出目录: {output_dir}
-""".format(
+'''.format(
             plat=self.jkapi_plat,
             base_url=self.base_url,
             default_model=self.default_model or "未设置",
-            plat_name=plat_name,
-            key_status="已配置" if self.jkapi_key else "未配置",
-            output_dir=str(self._resolve_output_dir(event)),
             uvr=self.uvr_choice,
             f0=self.f0_method,
             adaptive_status="开启" if self.adaptive_shift else "关闭",
             comfort=f"{self.comfort_low}-{self.comfort_high}",
             gap_ms=self.trim_keep_gap_ms,
+            auto_split_status=auto_split_status,
+            force_send_status=force_send_status,
+            split_duet_status=split_duet_status,
+            remote_status=remote_status,
+            har_model=harmony_model_display,
+            har_comfort=f"{self.harmony_comfort_low}-{self.harmony_comfort_high}",
+            har_vol=f"{self.harmony_vol:+d}",
             reverb=self.reverb_intensity,
             delay=self.delay_intensity,
             kshift=self.default_key_shift,
             vvol=self.default_vocal_vol,
             ivol=self.default_inst_vol,
-            har_model=self.harmony_model or "（跟主唱同模型）",
-            har_comfort=f"{self.harmony_comfort_low}-{self.harmony_comfort_high}",
-            har_vol=self.harmony_vol,
+            key_status="已配置" if self.jkapi_key else "未配置",
+            output_dir=str(self._resolve_output_dir(event)),
         )
         yield event.plain_result(help_text.strip())
 
@@ -896,10 +998,10 @@ class RVCSvcPluginV2(Star):
     async def set_adaptive(self, event: AstrMessageEvent):
         """开启/关闭自适应变调（升降调为 0 时自动计算最优变调值）"""
         args = event.message_str.split()
-        if len(args) >= 2 and args[1].lower() in ("on", "true", "1", "开", "1"):
+        if len(args) >= 2 and args[1].lower() in ("on", "true", "1", "开"):
             self.adaptive_shift = True
             yield event.plain_result(f"✅ 自适应变调已开启（舒适区 {self.comfort_low}-{self.comfort_high}，升降调为 0 时自动计算）")
-        elif len(args) >= 2 and args[1].lower() in ("off", "false", "0", "关", "0"):
+        elif len(args) >= 2 and args[1].lower() in ("off", "false", "0", "关"):
             self.adaptive_shift = False
             yield event.plain_result("✅ 自适应变调已关闭（将使用命令/配置中的升降调值）")
         else:
@@ -1559,10 +1661,10 @@ class RVCSvcPluginV2(Star):
                 if best_cut <= 0:
                     # 没找到合适静音，取 54.5s 强制切
                     best_cut = cursor_ms + 54500
-                    logger.info(f"[_split_for_qq_voice] 段{idx}: 未找到静音，强制切 {54.5}s")
+                    logger.info(f"[_split_for_qq_voice] 段{idx}: 未找到静音，强制切 54.5s")
                 else:
                     logger.info(
-                        f"[_split_for_qq_voice] 段{idx}: 在 {best_cut-cursor_ms/1000:.0f}s 处"
+                        f"[_split_for_qq_voice] 段{idx}: 在 {(best_cut-cursor_ms)/1000:.0f}s 处"
                         f"切分（RMS {best_rms:.1f}dBFS）"
                     )
 
@@ -1671,12 +1773,6 @@ class RVCSvcPluginV2(Star):
         """
         args = {"song": ""}
         cleaned = message.strip()
-        # 所有可能的命令词（带 / 和不带 / 都列上），先整体剥掉
-        cmd_words = [
-            "/cover", "/linkcover", "/capella", "/linkcapella", "/coverhelp",
-            "cover", "linkcover", "capella", "linkcapella", "coverhelp",
-            "翻唱", "直链翻唱", "清唱", "直链清唱", "翻唱帮助",
-        ]
         # 用正则剥掉开头的命令词（可选 / 前缀 + 命令词 + 至少一个空格或结尾）
         import re
         pattern = r"^(?:/)?(?:cover|linkcover|capella|linkcapella|coverhelp|翻唱|直链翻唱|清唱|直链清唱|翻唱帮助)\b\s*"

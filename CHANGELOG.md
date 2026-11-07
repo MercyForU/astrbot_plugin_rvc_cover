@@ -1,5 +1,32 @@
 # 更新日志
 
+## v2.1.0 (2026-11-06)
+
+### ✨ 新功能
+- **LLM 工具内强制接管发送**（`force_plugin_send`，默认关闭）
+  - 开启后，LLM 调用 `rvc_cover` / `a_capella_cover` / `smart_cover` 工具翻唱完成时，**插件在工具内部直接向用户发送语音**，不再依赖 LLM 调用 `send_message_to_user`
+  - 发送走 QQ 语音消息组件（`MessageChain + Record`），多级回退：`MessageChain + Record` → `event.record / record_result` → `event.image`，避免把语音发成附件
+  - 多段之间保持 2 秒间隔，规避 QQ 只发第一条的问题
+  - 工具返回值改为强提示「已发送，别再发」，阻止 LLM 重复发送/发成文件
+  - 作用范围：仅 LLM 对话工具（`rvc_cover` / `a_capella_cover` / `smart_cover`）；`/cover`、`/capella`、`/linkcover` 等指令不受影响，仍走原发送流程
+  - 关闭时行为与 v2.0.0 完全一致，不影响老用户
+
+### 🐛 修复
+- 修复 `_llm_a_capella_cover` **重复搜索**问题：旧实现先搜一次做校验，再让 `_llm_rvc_cover` 又搜一次（一次清唱多打一次 jkapi 请求，且两次结果可能不同）；现简化为直接复用 `_llm_rvc_cover(a_capella=True)`
+- 修复 `/coverhelp` 帮助文本中 JSON 示例的代码围栏导致 `main.py` 三引号未闭合、插件 import 报 `SyntaxError: unterminated triple-quoted string literal` 的问题
+- 修复 `/coverhelp` 文本中 `{你的QQ号}`、`{歌名}` 等未转义花括号在 `.format()` 时抛 `KeyError` 的问题
+- 修复 `/coverhelp` 文本中 `{har_model_note}` 占位符未传参导致的 `.format()` 报错
+- 修复 `_split_for_qq_voice` 切分日志里 `best_cut-cursor_ms/1000` 运算符优先级错误（实际按 `best_cut - (cursor_ms/1000)` 计算），现正确输出段内切分位置
+- 修复 `/setadaptive` 参数列表中 `"1"` 重复出现的问题
+
+### 🔧 内部优化
+- `_conf_schema.json` → `output_rules` 新增 `force_plugin_send` 配置项（bool，默认 `false`）
+- 启动日志新增 `force_plugin_send=开启/关闭` 状态输出，便于确认配置是否加载
+- `/coverhelp` 中各状态字符串改为预计算变量，避免 `.format()` 内嵌长条件表达式
+- 新增 `_send_voice_parts_via_event()` 方法：在 async 工具函数内用 `await event.send(...)` 主动发送语音（原 `_send_cover_result` 为生成器，仅适用于指令流）
+
+---
+
 ## v2.0.0 (2024-11-04)
 
 ### 🎯 核心功能新增

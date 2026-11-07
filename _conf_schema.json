@@ -91,6 +91,12 @@
         "hint": "false（默认）= 高版本QQ支持长语音，不切分，整段直接发送。 发送语音出现问题可以打开此选项。",
         "default": false
       },
+      "force_plugin_send": {
+        "description": "LLM 工具内强制接管发送",
+        "type": "bool",
+        "hint": "开启后：LLM 调用 rvc_cover / a_capella_cover / smart_cover 工具翻唱完成后，插件在工具内部直接向用户发送语音（走 QQ 语音消息组件，不会变附件），并把返回值改成「已发送，别再发」的强提示，避免 LLM 漏发/发成文件。关闭时：保持原逻辑，由 LLM 根据返回提示调用 send_message_to_user。",
+        "default": false
+      },
       "output_dir": {
         "description": "输出目录",
         "type": "string",
