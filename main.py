@@ -26,7 +26,7 @@ from .api import JKApiMusicAPI
     "astrbot_plugin_rvc_cover",
     "RVC-Cover",
     "🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，重要！请先查看文档部署依赖，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的音域，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)",
-    "2.1.2",
+    "2.1.3",
     "https://github.com/MercyForU/astrbot_plugin_rvc_cover",
 )
 class RVCSvcPluginV2(Star):
@@ -1271,7 +1271,7 @@ class RVCSvcPluginV2(Star):
                     if got_final:
                         break
                     # 没收到 complete：SSE 流已关闭但任务没完（网络抖动），重连继续等
-                    time.sleep(2)
+                    await asyncio.sleep(2)
 
                 if not got_final:
                     return {"success": False, "error": f"翻唱超时 ({self.request_timeout}秒)"}

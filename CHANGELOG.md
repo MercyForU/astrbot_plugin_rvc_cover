@@ -1,5 +1,17 @@
 # 更新日志
 
+## v2.1.3 (2026-11-08)
+
+### 🐛 修复
+- **修复 async 翻唱轮询循环中的同步阻塞**（`main.py`）：SSE 重连退避处的 `time.sleep(2)` 改为 `await asyncio.sleep(2)`。原实现在 async 上下文中直接调用 `time.sleep` 会阻塞整个 AstrBot 事件循环（期间所有并发消息/任务都被卡住 2s），现改为让出事件循环的异步等待
+
+### 🔒 安全加固
+- **jkapi TLS 证书校验策略重构**（`api.py`）：
+  - 原实现无条件 `verify=False`，apiKey 直接经未校验 TLS 连接明文提交，存在中间人窃取密钥风险
+  - 现默认 `verify=True`（标准证书校验），仅当 SSL/TLS 握手/证书类错误发生时（如 Windows 部分环境系统证书链缺失 jkapi.com 证书）才自动降级为 `verify=False` 重试一次，并打印明确警告日志
+  - 新增 `tls_verify_autofallback` 参数（默认 `True`）：设为 `False` 时 TLS 校验失败直接报错放弃，绝不降级，适合对密钥安全有更高要求的部署
+  - 整理出 `_is_tls_error` / `_make_client` / `_downgrade_to_unverified` / `_do_search` 等方法，消除原先两段重复的降级重试内联代码
+
 ## v2.1.0 (2026-11-06)
 
 ### ✨ 新功能

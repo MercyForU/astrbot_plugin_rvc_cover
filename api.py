@@ -21,13 +21,25 @@ class JKApiMusicAPI:
     plat 取值：
     - "qq"：QQ 音乐（默认）
     - "wy"：网易云音乐
+
+    TLS 策略：默认使用标准证书校验（verify=True）。仅当请求抛出具体的
+    SSL/TLS 握手错误（常见于 Windows 部分环境系统证书链缺失），且用户
+    允许自动降级（tls_verify_autofallback，默认 True）时，才重建为
+    verify=False 的 client 重试一次。降级会发出警告日志；若用户显式
+    禁用该选项，则直接放弃重试并记录错误。
     """
 
     name = "jkapi"
     BASE_URL = "https://jkapi.com/api/music"
     VALID_PLATS = ("qq", "wy")
 
-    def __init__(self, api_key: str = "", plat: str = "qq", request_timeout: float = 30.0):
+    def __init__(
+        self,
+        api_key: str = "",
+        plat: str = "qq",
+        request_timeout: float = 30.0,
+        tls_verify_autofallback: bool = True,
+    ):
         plat = (plat or "qq").lower()
         if plat not in self.VALID_PLATS:
             logger.warning(f"无效 plat: {plat}，回退到 qq")
@@ -35,27 +47,61 @@ class JKApiMusicAPI:
         self.api_key = api_key
         self.plat = plat
         self._request_timeout = float(request_timeout)  # 由 main.py 注入 search_timeout
+        # 是否允许 TLS 校验失败时自动降级为 verify=False（默认允许）
+        self._tls_verify_autofallback = bool(tls_verify_autofallback)
         self._client: Optional[httpx.AsyncClient] = None
-        self._tls_verify: Any = True  # TLS 握手失败后自动降级为 False
+        # 当前 client 使用的 TLS 校验状态：True=校验证书（默认），False=已降级为不校验
+        self._tls_verify: Any = True
+
+    @staticmethod
+    def _is_tls_error(e: Exception) -> bool:
+        """判断异常是否属于 SSL/TLS 握手/证书错误。"""
+        if isinstance(e, (httpx.ConnectError, httpx.RemoteProtocolError)):
+            return True
+        msg = str(e).lower()
+        return any(
+            kw in msg
+            for kw in (
+                "certificate",
+                "ssl",
+                "handshake",
+                "tls",
+                "credential",
+                "凭证",
+                "secure channel",
+            )
+        )
+
+    def _make_client(self, verify: Any) -> httpx.AsyncClient:
+        """构造一个新的 AsyncClient（内层 timeout 比外层多 5s 缓冲）。"""
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(self._request_timeout + 5),
+            verify=verify,
+        )
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            # Windows 部分环境系统证书链缺 jkapi.com 证书，TLS 握手报
-            # "安全包中没有可用的凭证"。首次即用 verify=False 兜底
-            #（API key 鉴权 + 响应 code 校验仍生效；第三方聚合接口场景可接受）。
-            # 内层 client 超时比外层 asyncio.wait_for 多 5s 缓冲，避免内外配反
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self._request_timeout + 5),
-                verify=False,
-            )
-            self._tls_verify = False
+            verify = True if self._tls_verify is True else False
+            self._client = self._make_client(verify)
         return self._client
 
-    def _retry_tls_unverified(self):
-        """TLS 握手失败时：关闭旧 client，重建（verify=False 已默认，此函数保留兼容）。"""
+    def _downgrade_to_unverified(self) -> bool:
+        """降级到 verify=False 并返回新 client；不允许降级时返回 None。"""
+        if not self._tls_verify_autofallback:
+            logger.error(
+                "jkapi TLS 证书校验失败，且未允许自动降级"
+                "（tls_verify_autofallback=False），放弃重试。"
+            )
+            return None
+        logger.warning(
+            "jkapi TLS 证书校验失败，降级为 verify=False 重试一次。"
+            "apiKey 将经未校验的 HTTPS 连接发送，请确认为可信网络环境；"
+            "如需保持证书校验，请修复本地 CA 链或设置 tls_verify_autofallback=False。"
+        )
         self._tls_verify = False
         if self._client is not None and not self._client.is_closed:
             self._client = None
+        return self._get_client()
 
     def _build_params(self, keyword: str) -> dict:
         """jkapi 需要 4 个参数：name, plat, type, apiKey（httpx 自动做 URL 编码）
@@ -71,6 +117,30 @@ class JKApiMusicAPI:
             "type": "json",
             "apiKey": self.api_key,
         }
+
+    async def _do_search(
+        self, keyword: str, client: httpx.AsyncClient, params: dict, inner_timeout: float
+    ) -> List[Dict[str, str]]:
+        """单次 GET 请求并解析 jkapi 响应。"""
+        resp = await client.get(self.BASE_URL, params=params, timeout=inner_timeout)
+        if resp.status_code != 200:
+            logger.error(f"jkapi 搜索失败: HTTP {resp.status_code}")
+            return []
+        # jkapi 的 Content-Type 是 text/json，直接按文本解析
+        data = json.loads(resp.text)
+        if data.get("code") != 1:
+            logger.warning(f"jkapi 返回 code={data.get('code')}: {data.get('msg')}")
+            return []
+        return [
+            {
+                "id": keyword,
+                "name": data.get("name", keyword),
+                "artists": data.get("artist", "未知"),
+                "album": data.get("album", ""),
+                "url": data.get("music_url", ""),
+                "platform": "jkapi-" + self.plat,
+            }
+        ]
 
     async def fetch_data(self, keyword: str, limit: int = 5) -> List[Dict[str, str]]:
         """按歌名搜索，返回含 music_url（直链）的单条结果。
@@ -88,51 +158,23 @@ class JKApiMusicAPI:
         # 比内层先取消导致 TimeoutError（之前内层 20s > 外层 15s 配反了）
         inner_timeout = self._request_timeout + 5
         try:
-            resp = await client.get(self.BASE_URL, params=params, timeout=inner_timeout)
-            if resp.status_code != 200:
-                logger.error(f"jkapi 搜索失败: HTTP {resp.status_code}")
-                return []
-            # jkapi 的 Content-Type 是 text/json，直接按文本解析
-            data = json.loads(resp.text)
-            if data.get("code") != 1:
-                logger.warning(f"jkapi 返回 code={data.get('code')}: {data.get('msg')}")
-                return []
-            return [
-                {
-                    "id": keyword,
-                    "name": data.get("name", keyword),
-                    "artists": data.get("artist", "未知"),
-                    "album": data.get("album", ""),
-                    "url": data.get("music_url", ""),
-                    "platform": "jkapi-" + self.plat,
-                }
-            ]
+            return await self._do_search(keyword, client, params, inner_timeout)
         except Exception as e:
-            # Windows 部分环境系统证书链缺 jkapi.com 证书 → TLS 握手报
-            # "安全包中没有可用的凭证"。降级 verify=False 重试一次。
-            msg = str(e)
-            if ("凭证" in msg or "certificate" in msg.lower()
-                    or "ssl" in msg.lower() or "handshake" in msg.lower()):
-                self._retry_tls_unverified()
-                try:
-                    client = self._get_client()
-                    resp = await client.get(self.BASE_URL, params=params, timeout=inner_timeout)
-                    if resp.status_code == 200:
-                        data = json.loads(resp.text)
-                        if data.get("code") == 1:
-                            return [
-                                {
-                                    "id": keyword,
-                                    "name": data.get("name", keyword),
-                                    "artists": data.get("artist", "未知"),
-                                    "album": data.get("album", ""),
-                                    "url": data.get("music_url", ""),
-                                    "platform": "jkapi-" + self.plat,
-                                }
-                            ]
-                except Exception as e2:
-                    logger.error(f"jkapi 降级后仍失败: {e2}")
-            logger.error(f"jkapi 搜索异常: {e}")
+            # TLS/证书类错误（如 Windows 部分环境系统证书链缺 jkapi.com 证书）：
+            # 若用户允许，降级 verify=False 重试一次；否则直接失败并记录日志。
+            if self._is_tls_error(e):
+                downgraded = self._downgrade_to_unverified()
+                if downgraded is not None:
+                    try:
+                        return await self._do_search(keyword, downgraded, params, inner_timeout)
+                    except Exception as e2:
+                        logger.error(f"jkapi TLS 降级后仍失败: {e2}")
+                else:
+                    logger.error(
+                        f"jkapi 搜索异常（TLS 证书校验失败且未允许自动降级）: {e}"
+                    )
+            else:
+                logger.error(f"jkapi 搜索异常: {e}")
             return []
 
     async def close(self):

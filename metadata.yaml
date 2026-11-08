@@ -1,7 +1,7 @@
 name: astrbot_plugin_rvc_cover
 display_name: AI 翻唱助手
 desc: 🎤 基于 RVCSVC-API-Pro 的 AI 翻唱插件，重要！请先查看文档部署依赖，支持AI自动翻唱/清唱，输出音频文件自动分割成小于一分钟的语音发送。(注意：初次使用务必配置好音色模型的✨音域✨，或者关闭自适应变调，必须部署RVCSVC-API-Pro作为后端中间层，详见插件文档)
-version: v2.1.2
+version: v2.1.3
 author: MercyForU
 repo: "https://github.com/MercyForU/astrbot_plugin_rvc_cover"
 support_platforms:
