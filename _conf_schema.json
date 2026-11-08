@@ -25,7 +25,7 @@
         "description": "默认 RVC 模型",
         "type": "string",
         "hint": "翻唱时默认使用的 RVC 模型（.pth文件 详细见：RVC模型\\assets\\weights文件夹中 如：guanguanV1.pth / kikiV1.pth ），留空则用后端默认",
-        "default": "kikiV1.pth"
+        "default": "keruanV1.pth"
       },
       "adaptive_shift": {
         "description": "自适应变调开关",
@@ -37,13 +37,13 @@
         "description": "舒适区高音",
         "type": "string",
         "hint": "自适应变调参考的舒适区最高音，这里按声部给出几个参考值,高音部分：女/男高音: A5/G4 女/男中音: F5/E4 女/男低音: D5/C4。",
-        "default": "F5"
+        "default": "E5"
       },
       "comfort_low": {
         "description": "舒适区低音",
         "type": "string",
         "hint": "自适应变调参考的舒适区最低音，这里按声部给出几个参考值,低音部分：女/男高音: C4/B2 女/男中音: A3/G2 女/男低音: F3/E2。",
-        "default": "A3"
+        "default": "F3"
       }
     }
   },
@@ -92,10 +92,10 @@
         "default": false
       },
       "force_plugin_send": {
-        "description": "LLM 工具内强制接管发送",
+        "description": "强制语音发送",
         "type": "bool",
         "hint": "开启后：LLM 调用 rvc_cover / a_capella_cover / smart_cover 工具翻唱完成后，插件在工具内部直接向用户发送语音（走 QQ 语音消息组件，不会变附件），并把返回值改成「已发送，别再发」的强提示，避免 LLM 漏发/发成文件。关闭时：保持原逻辑，由 LLM 根据返回提示调用 send_message_to_user。",
-        "default": false
+        "default": true
       },
       "output_dir": {
         "description": "输出目录",
@@ -225,7 +225,7 @@
         "description": "伴唱舒适区高音",
         "type": "string",
         "hint": "双声道模式下，伴唱（副声轨）自适应变调的舒适区最高音，这里按声部给出几个参考值,高音部分：女/男高音: A5/G4 女/男中音: F5/E4 女/男低音: D5/C4。",
-        "default": "A4"
+        "default": "E5"
       },
       "harmony_comfort_low": {
         "description": "伴唱舒适区低音",
